@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Nico · Coach de running</title>
+<style>
+  :root {
+    --fondo: #0f1115;
+    --panel: #171a21;
+    --borde: #262b36;
+    --texto: #e7e9ee;
+    --tenue: #99a1b3;
+    --acento: #4ade80;
+    --alerta: #f87171;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+    background: var(--fondo); color: var(--texto);
+    display: grid; grid-template-rows: auto 1fr; min-height: 100vh;
+  }
+  header {
+    padding: 20px 24px; border-bottom: 1px solid var(--borde);
+    display: flex; align-items: center; gap: 16px;
+  }
+  h1 { font-size: 18px; margin: 0; font-weight: 600; }
+  .estado { font-size: 13px; color: var(--tenue); margin-left: auto; }
+  .punto {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--tenue); margin-right: 6px; vertical-align: middle;
+  }
+  .punto.activo { background: var(--acento); box-shadow: 0 0 8px var(--acento); }
+  .punto.error { background: var(--alerta); }
+  main {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+    padding: 24px; align-items: start;
+  }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--panel); border: 1px solid var(--borde);
+    border-radius: 12px; padding: 18px; min-height: 220px;
+  }
+  .panel h2 {
+    font-size: 12px; text-transform: uppercase; letter-spacing: .08em;
+    color: var(--tenue); margin: 0 0 14px;
+  }
+  button {
+    background: var(--acento); color: #06240f; border: 0; border-radius: 10px;
+    padding: 12px 22px; font-size: 15px; font-weight: 600; cursor: pointer;
+  }
+  button:disabled { background: #2a2f3a; color: var(--tenue); cursor: not-allowed; }
+  button.detener { background: var(--alerta); color: #2b0707; }
+  .turno { margin-bottom: 12px; line-height: 1.5; font-size: 14px; }
+  .turno .quien {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--tenue); display: block; margin-bottom: 2px;
+  }
+  .turno.coach .quien { color: var(--acento); }
+  #conversacion { max-height: 60vh; overflow-y: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--borde); }
+  th { color: var(--tenue); font-weight: 500; font-size: 11px; text-transform: uppercase; }
+  .fase-descarga td { color: #fbbf24; }
+  .fase-carrera td { color: var(--acento); font-weight: 600; }
+  .vacio { color: var(--tenue); font-size: 14px; }
+  .aviso {
+    font-size: 12px; color: var(--tenue); margin-top: 14px;
+    padding-top: 12px; border-top: 1px solid var(--borde);
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Nico · entrenador de running</h1>
+  <button id="boton">Hablar con Nico</button>
+  <span class="estado"><span class="punto" id="punto"></span><span id="estado">desconectado</span></span>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>Conversación</h2>
+    <div id="conversacion"><p class="vacio">Pulsa «Hablar con Nico» y cuéntale qué carrera tienes en mente.</p></div>
+  </section>
+
+  <section class="panel">
+    <h2>Plan de entrenamiento</h2>
+    <div id="plan"><p class="vacio">Aquí aparecerá tu plan cuando Nico lo genere.</p></div>
+    <p class="aviso">
+      Orientación de entrenamiento, no consejo médico. Ante dolor persistente,
+      consulta a un profesional de la salud.
+    </p>
+  </section>
+</main>
+
+<script>
+const boton = document.getElementById("boton");
+const estado = document.getElementById("estado");
+const punto = document.getElementById("punto");
+const conversacion = document.getElementById("conversacion");
+const panelPlan = document.getElementById("plan");
+
+let ws, ctxEntrada, ctxSalida, micro, worklet;
+let activo = false;
+let siguienteInicio = 0;
+let fuentes = [];
+let ultimoQuien = null;
+
+function marcar(texto, clase = "") {
+  estado.textContent = texto;
+  punto.className = "punto " + clase;
+}
+
+async function iniciar() {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+  });
+
+  ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
+  ws.binaryType = "arraybuffer";
+
+  ws.onmessage = (ev) =>
+    typeof ev.data === "string" ? manejarJson(JSON.parse(ev.data)) : reproducir(ev.data);
+  ws.onerror = () => marcar("error de conexión", "error");
+  ws.onclose = () => detener();
+
+  await new Promise((r) => (ws.onopen = r));
+
+  // El micrófono se captura ya a 16 kHz: así el worklet no tiene que remuestrear.
+  ctxEntrada = new AudioContext({ sampleRate: 16000 });
+  await ctxEntrada.audioWorklet.addModule("/static/captura-audio.js");
+  micro = ctxEntrada.createMediaStreamSource(stream);
+  worklet = new AudioWorkletNode(ctxEntrada, "captura-pcm");
+  worklet.port.onmessage = (ev) => {
+    if (ws.readyState === WebSocket.OPEN) ws.send(ev.data);
+  };
+  micro.connect(worklet);
+
+  ctxSalida = new AudioContext({ sampleRate: 24000 });
+  siguienteInicio = 0;
+
+  activo = true;
+  boton.textContent = "Terminar";
+  boton.classList.add("detener");
+  marcar("escuchando", "activo");
+}
+
+function detener() {
+  if (!activo) return;
+  activo = false;
+  ws?.readyState === WebSocket.OPEN && ws.close();
+  micro?.mediaStream?.getTracks().forEach((t) => t.stop());
+  ctxEntrada?.close();
+  ctxSalida?.close();
+  boton.textContent = "Hablar con Nico";
+  boton.classList.remove("detener");
+  marcar("desconectado");
+}
+
+function manejarJson(msg) {
+  switch (msg.tipo) {
+    case "listo":
+      marcar("escuchando", "activo");
+      break;
+    case "transcripcion":
+      escribirTurno(msg.quien, msg.texto);
+      break;
+    case "plan":
+      dibujarPlan(msg.plan);
+      break;
+    case "interrumpido":
+      // El corredor habló encima: descartamos lo que quedaba por sonar.
+      fuentes.forEach((f) => { try { f.stop(); } catch {} });
+      fuentes = [];
+      siguienteInicio = 0;
+      break;
+    case "fin":
+    case "error":
+      marcar(msg.mensaje || msg.motivo, "error");
+      escribirTurno("sistema", msg.mensaje || msg.motivo);
+      break;
+  }
+}
+
+function escribirTurno(quien, texto) {
+  conversacion.querySelector(".vacio")?.remove();
+  // La API va transcribiendo por fragmentos: se anexan al mismo turno.
+  if (quien === ultimoQuien) {
+    conversacion.lastElementChild.querySelector(".texto").textContent += texto;
+  } else {
+    const div = document.createElement("div");
+    div.className = `turno ${quien}`;
+    div.innerHTML = `<span class="quien">${quien}</span><span class="texto"></span>`;
+    div.querySelector(".texto").textContent = texto;
+    conversacion.appendChild(div);
+    ultimoQuien = quien;
+  }
+  conversacion.scrollTop = conversacion.scrollHeight;
+}
+
+function reproducir(buffer) {
+  if (!ctxSalida) return;
+  const pcm = new Int16Array(buffer);
+  const audio = ctxSalida.createBuffer(1, pcm.length, 24000);
+  const canal = audio.getChannelData(0);
+  for (let i = 0; i < pcm.length; i++) canal[i] = pcm[i] / 32768;
+
+  const fuente = ctxSalida.createBufferSource();
+  fuente.buffer = audio;
+  fuente.connect(ctxSalida.destination);
+
+  // Encolar en el tiempo evita cortes entre trozos consecutivos.
+  const ahora = ctxSalida.currentTime;
+  siguienteInicio = Math.max(siguienteInicio, ahora);
+  fuente.start(siguienteInicio);
+  siguienteInicio += audio.duration;
+
+  fuentes.push(fuente);
+  fuente.onended = () => (fuentes = fuentes.filter((f) => f !== fuente));
+}
+
+function dibujarPlan(plan) {
+  const v = plan.viabilidad;
+  const filas = plan.semanas_plan
+    .map(
+      (s) => `<tr class="fase-${s.fase}">
+        <td>${s.numero}</td><td>${s.fase}</td>
+        <td>${s.km_total.toFixed(1)}</td><td>${s.km_fondo.toFixed(1)}</td></tr>`
+    )
+    .join("");
+
+  const ritmos = Object.entries(plan.ritmos || {})
+    .map(([zona, r]) => `<tr><td>${zona}</td><td>${formatoRitmo(r)} /km</td></tr>`)
+    .join("");
+
+  panelPlan.innerHTML = `
+    <p><strong>${plan.distancia}</strong> · ${plan.semanas} semanas ·
+       ${plan.dias_por_semana} días/semana
+       ${plan.vdot ? `· VDOT ${plan.vdot}` : ""}</p>
+    <p style="color:${v.veredicto === "viable" ? "var(--acento)" : "#fbbf24"};font-size:13px">
+       ${v.veredicto.toUpperCase()}: ${v.razon}</p>
+    ${ritmos ? `<table><tr><th>Zona</th><th>Ritmo</th></tr>${ritmos}</table><br>` : ""}
+    <table>
+      <tr><th>Sem</th><th>Fase</th><th>km</th><th>Fondo</th></tr>
+      ${filas}
+    </table>`;
+}
+
+function formatoRitmo(r) {
+  const mmss = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  return r.seg_por_km_rapido === r.seg_por_km_lento
+    ? mmss(r.seg_por_km_rapido)
+    : `${mmss(r.seg_por_km_rapido)}–${mmss(r.seg_por_km_lento)}`;
+}
+
+boton.onclick = () =>
+  activo ? detener() : iniciar().catch((e) => marcar(e.message, "error"));
+</script>
+</body>
+</html>
