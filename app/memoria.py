@@ -1,0 +1,208 @@
+"""Persistencia de la conversación y del perfil del corredor.
+
+Cumple dos funciones a la vez:
+
+1. **Dentro de una conversación**: la Live API se queda inerte tras el primer
+   turno del modelo, así que se abre una sesión por intervención. El historial
+   que se guarda aquí es lo que se reinyecta en cada sesión nueva para que el
+   coach no pierda el hilo.
+
+2. **Entre conversaciones**: el perfil estructurado del corredor sobrevive al
+   cierre del navegador, para que la siguiente charla empiece por donde
+   quedó la anterior.
+
+No se guarda audio, solo texto: las transcripciones son suficientes como
+contexto y ocupan una fracción.
+"""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+from contextlib import contextmanager
+from datetime import date, datetime, timezone
+from pathlib import Path
+
+RUTA_BD = Path(__file__).resolve().parent.parent / "coach.db"
+
+ESQUEMA = """
+CREATE TABLE IF NOT EXISTS corredores (
+    id           TEXT PRIMARY KEY,
+    nombre       TEXT,
+    perfil       TEXT NOT NULL DEFAULT '{}',   -- JSON con marca, volumen, objetivo...
+    actualizado  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS turnos (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    corredor_id  TEXT NOT NULL REFERENCES corredores(id),
+    conversacion TEXT NOT NULL,                -- agrupa los turnos de una charla
+    rol          TEXT NOT NULL CHECK (rol IN ('user', 'model')),
+    texto        TEXT NOT NULL,
+    creado       TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_turnos_corredor ON turnos(corredor_id, id);
+
+CREATE TABLE IF NOT EXISTS planes (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    corredor_id  TEXT NOT NULL REFERENCES corredores(id),
+    plan         TEXT NOT NULL,                -- JSON del plan generado
+    creado       TEXT NOT NULL
+);
+"""
+
+
+def _ahora() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+@contextmanager
+def conectar(ruta: Path | str | None = None):
+    con = sqlite3.connect(ruta or RUTA_BD)
+    con.row_factory = sqlite3.Row
+    try:
+        con.executescript(ESQUEMA)
+        yield con
+        con.commit()
+    finally:
+        con.close()
+
+
+class Memoria:
+    """Acceso a la memoria de un corredor concreto."""
+
+    def __init__(self, corredor_id: str, conversacion: str, ruta: Path | str | None = None):
+        self.corredor_id = corredor_id
+        self.conversacion = conversacion
+        self.ruta = ruta or RUTA_BD
+        with conectar(self.ruta) as con:
+            con.execute(
+                "INSERT INTO corredores (id, perfil, actualizado) VALUES (?, '{}', ?) "
+                "ON CONFLICT(id) DO NOTHING",
+                (corredor_id, _ahora()),
+            )
+
+    # ---------------------------------------------------------------- turnos
+
+    def guardar_turno(self, rol: str, texto: str) -> None:
+        if not texto.strip():
+            return
+        with conectar(self.ruta) as con:
+            con.execute(
+                "INSERT INTO turnos (corredor_id, conversacion, rol, texto, creado) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (self.corredor_id, self.conversacion, rol, texto.strip(), _ahora()),
+            )
+
+    def historial(self, max_turnos: int = 20) -> list[dict]:
+        """Turnos de ESTA conversación, en el formato que espera la Live API."""
+        with conectar(self.ruta) as con:
+            filas = con.execute(
+                "SELECT rol, texto FROM turnos WHERE corredor_id = ? AND conversacion = ? "
+                "ORDER BY id DESC LIMIT ?",
+                (self.corredor_id, self.conversacion, max_turnos),
+            ).fetchall()
+        return [
+            {"role": f["rol"], "parts": [{"text": f["texto"]}]}
+            for f in reversed(filas)
+        ]
+
+    # ---------------------------------------------------------------- perfil
+
+    def perfil(self) -> dict:
+        with conectar(self.ruta) as con:
+            fila = con.execute(
+                "SELECT nombre, perfil FROM corredores WHERE id = ?", (self.corredor_id,)
+            ).fetchone()
+        if not fila:
+            return {}
+        datos = json.loads(fila["perfil"] or "{}")
+        if fila["nombre"]:
+            datos.setdefault("nombre", fila["nombre"])
+        return datos
+
+    def actualizar_perfil(self, **campos) -> dict:
+        """Fusiona campos nuevos sobre el perfil existente."""
+        datos = self.perfil()
+        datos.update({k: v for k, v in campos.items() if v is not None})
+        with conectar(self.ruta) as con:
+            con.execute(
+                "UPDATE corredores SET perfil = ?, nombre = COALESCE(?, nombre), "
+                "actualizado = ? WHERE id = ?",
+                (json.dumps(datos, ensure_ascii=False), datos.get("nombre"),
+                 _ahora(), self.corredor_id),
+            )
+        return datos
+
+    def guardar_plan(self, plan: dict) -> None:
+        with conectar(self.ruta) as con:
+            con.execute(
+                "INSERT INTO planes (corredor_id, plan, creado) VALUES (?, ?, ?)",
+                (self.corredor_id, json.dumps(plan, ensure_ascii=False), _ahora()),
+            )
+        v = plan.get("viabilidad", {})
+        self.actualizar_perfil(
+            distancia_objetivo=plan.get("distancia"),
+            semanas_plan=plan.get("semanas"),
+            dias_por_semana=plan.get("dias_por_semana"),
+            vdot=plan.get("vdot"),
+            km_pico=v.get("km_pico_alcanzable"),
+        )
+
+    def ultimo_plan(self) -> dict | None:
+        with conectar(self.ruta) as con:
+            fila = con.execute(
+                "SELECT plan FROM planes WHERE corredor_id = ? ORDER BY id DESC LIMIT 1",
+                (self.corredor_id,),
+            ).fetchone()
+        return json.loads(fila["plan"]) if fila else None
+
+    # ------------------------------------------------------------- resúmenes
+
+    def resumen_para_prompt(self) -> str | None:
+        """Lo que el coach debe recordar de este corredor al empezar a hablar.
+
+        Va en la instrucción de sistema, así que se escribe en prosa corta:
+        una lista de campos haría que el modelo la recite como un expediente.
+        """
+        perfil = self.perfil()
+        ultima = self._ultima_charla()
+        if not perfil and not ultima:
+            return None
+
+        partes = []
+        if nombre := perfil.get("nombre"):
+            partes.append(f"Se llama {nombre}.")
+        if perfil.get("distancia_objetivo"):
+            frase = f"Prepara un {perfil['distancia_objetivo']}"
+            if perfil.get("semanas_plan"):
+                frase += f" con un plan de {perfil['semanas_plan']} semanas"
+            if perfil.get("dias_por_semana"):
+                frase += f", entrenando {perfil['dias_por_semana']} días por semana"
+            partes.append(frase + ".")
+        if perfil.get("vdot"):
+            partes.append(f"Su VDOT calculado es {perfil['vdot']}.")
+        if lesion := perfil.get("molestia_reciente"):
+            partes.append(f"Reportó una molestia en {lesion}; pregúntale cómo sigue.")
+        if ultima:
+            dias = ultima["dias"]
+            cuando = "hoy" if dias == 0 else "ayer" if dias == 1 else f"hace {dias} días"
+            partes.append(f"Hablaron por última vez {cuando}. Terminaron así: {ultima['texto']}")
+        return " ".join(partes) or None
+
+    def _ultima_charla(self) -> dict | None:
+        with conectar(self.ruta) as con:
+            fila = con.execute(
+                "SELECT texto, creado, conversacion FROM turnos "
+                "WHERE corredor_id = ? AND conversacion != ? AND rol = 'model' "
+                "ORDER BY id DESC LIMIT 1",
+                (self.corredor_id, self.conversacion),
+            ).fetchone()
+        if not fila:
+            return None
+        cuando = datetime.fromisoformat(fila["creado"]).date()
+        return {
+            "texto": fila["texto"][:200],
+            "dias": (date.today() - cuando).days,
+        }
