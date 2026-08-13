@@ -11,15 +11,17 @@ import logging
 import os
 import time
 from collections import defaultdict, deque
-from contextlib import suppress
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from uuid import uuid4
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from app import telegram
 from app.live_agent import ConversacionCoach
 from app.memoria import Memoria
 
@@ -40,8 +42,46 @@ ESTATICOS = RAIZ / "static"
 SESIONES_POR_IP_AL_DIA = int(os.getenv("MAX_SESSIONS_PER_IP", "20"))
 _historial: dict[str, deque[float]] = defaultdict(deque)
 
-app = FastAPI(title="Coach de running por voz")
+@asynccontextmanager
+async def ciclo_de_vida(_: FastAPI):
+    """Arranca el bot de Telegram y el recordatorio diario, si están configurados."""
+    tareas = []
+    if telegram.configurado():
+        tareas.append(asyncio.create_task(telegram.escuchar()))
+
+        planificador = AsyncIOScheduler(timezone=os.getenv("TZ_RECORDATORIOS", "America/Mexico_City"))
+        planificador.add_job(
+            telegram.enviar_recordatorios, "cron",
+            hour=telegram.HORA_RECORDATORIO, minute=0, id="recordatorio_diario",
+        )
+        planificador.start()
+        log.info("recordatorios diarios programados a las %02d:00",
+                 telegram.HORA_RECORDATORIO)
+    else:
+        log.info("Telegram desactivado: define TELEGRAM_BOT_TOKEN para activarlo")
+
+    yield
+
+    for tarea in tareas:
+        tarea.cancel()
+        with suppress(asyncio.CancelledError):
+            await tarea
+
+
+app = FastAPI(title="Coach de running por voz", lifespan=ciclo_de_vida)
 app.mount("/static", StaticFiles(directory=ESTATICOS), name="static")
+
+
+@app.get("/telegram/enlace")
+async def enlace_telegram(corredor: str):
+    """Enlace de un solo uso para vincular el Telegram de este corredor."""
+    if not telegram.configurado():
+        return {"disponible": False}
+    usuario = await telegram.nombre_del_bot()
+    if not usuario:
+        return {"disponible": False}
+    codigo = telegram.generar_codigo(corredor.strip()[:64])
+    return {"disponible": True, "url": f"https://t.me/{usuario}?start={codigo}"}
 
 
 @app.get("/")

@@ -92,12 +92,13 @@ La clave se saca gratis en [AI Studio](https://aistudio.google.com/apikey) y
 ## Tests
 
 ```bash
-.venv/bin/python -m pytest -q     # 124 tests
+.venv/bin/python -m pytest -q     # 154 tests
 ```
 
 Cubren la matemática de VDOT contra tablas, las reglas de carga sobre planes
-generados (progresión, descargas, taper, 80/20), el triaje de síntomas y la
-memoria.
+generados (progresión, descargas, taper, 80/20), el triaje de síntomas, la
+memoria y los recordatorios. Los de Telegram sustituyen el envío por un doble:
+no tocan la red.
 
 Un caso merece mención: el triaje **se niega a dictaminar** si no sabe si el
 dolor aparece en reposo, si hace cojear y si mejora al calentar. Salió de una
@@ -120,7 +121,26 @@ compartido no drene la cuota.
 - [x] Puente de voz bidireccional con function calling
 - [x] Cliente web (captura 16 kHz, reproducción 24 kHz, barge-in)
 - [x] Memoria: historial de la conversación y perfil entre conversaciones
-- [ ] Recordatorios proactivos por Telegram
+- [x] Recordatorios proactivos por Telegram
+
+## Recordatorios por Telegram
+
+Cada mañana el corredor recibe el entrenamiento del día: qué toca, cuántos
+kilómetros y a qué ritmo. Si dejó una molestia sin cerrar, el mensaje pregunta
+por ella antes que por el entrenamiento.
+
+Para activarlo, habla con [@BotFather](https://t.me/BotFather), crea un bot con
+`/newbot` y pon el token en `.env`. Sin token la app funciona igual y el botón
+de vincular simplemente no aparece.
+
+La vinculación no pide registrarse: el corredor abre un enlace con un código de
+un solo uso, el bot recibe `/start <codigo>` y aprende su chat. El código se
+quema al usarlo, para que un enlace filtrado no sirva dos veces.
+
+```bash
+TELEGRAM_BOT_TOKEN=...   # de @BotFather
+TELEGRAM_HORA=7          # hora local del recordatorio
+```
 
 ### Sobre WhatsApp
 

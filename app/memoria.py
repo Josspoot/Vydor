@@ -69,6 +69,28 @@ def conectar(ruta: Path | str | None = None):
         con.close()
 
 
+def corredores_notificables(ruta: Path | str | None = None) -> list[str]:
+    """Ids de corredores que vincularon Telegram y tienen un plan vigente."""
+    with conectar(ruta or RUTA_BD) as con:
+        filas = con.execute(
+            "SELECT DISTINCT c.id FROM corredores c "
+            "JOIN planes p ON p.corredor_id = c.id "
+            "WHERE json_extract(c.perfil, '$.telegram_chat_id') IS NOT NULL"
+        ).fetchall()
+    return [f["id"] for f in filas]
+
+
+def corredor_por_codigo(codigo: str, ruta: Path | str | None = None) -> str | None:
+    """Traduce el código que el corredor envía al bot a su id interno."""
+    with conectar(ruta or RUTA_BD) as con:
+        fila = con.execute(
+            "SELECT id FROM corredores "
+            "WHERE json_extract(perfil, '$.codigo_telegram') = ?",
+            (codigo,),
+        ).fetchone()
+    return fila["id"] if fila else None
+
+
 class Memoria:
     """Acceso a la memoria de un corredor concreto."""
 
@@ -135,6 +157,23 @@ class Memoria:
             )
         return datos
 
+    def borrar_del_perfil(self, *claves: str) -> dict:
+        """Elimina campos del perfil.
+
+        Hace falta un método aparte porque actualizar_perfil ignora los None
+        a propósito, para que un dato que no se conoce no borre el que ya
+        había. Aquí la intención es justo la contraria.
+        """
+        datos = self.perfil()
+        for clave in claves:
+            datos.pop(clave, None)
+        with conectar(self.ruta) as con:
+            con.execute(
+                "UPDATE corredores SET perfil = ?, actualizado = ? WHERE id = ?",
+                (json.dumps(datos, ensure_ascii=False), _ahora(), self.corredor_id),
+            )
+        return datos
+
     def guardar_plan(self, plan: dict) -> None:
         with conectar(self.ruta) as con:
             con.execute(
@@ -151,12 +190,24 @@ class Memoria:
         )
 
     def ultimo_plan(self) -> dict | None:
+        con_fecha = self.ultimo_plan_con_fecha()
+        return con_fecha[0] if con_fecha else None
+
+    def ultimo_plan_con_fecha(self) -> tuple[dict, date] | None:
+        """El plan y el día en que se generó.
+
+        La fecha es imprescindible para los recordatorios: sin ella no se
+        puede saber en qué semana del plan va el corredor.
+        """
         with conectar(self.ruta) as con:
             fila = con.execute(
-                "SELECT plan FROM planes WHERE corredor_id = ? ORDER BY id DESC LIMIT 1",
+                "SELECT plan, creado FROM planes WHERE corredor_id = ? "
+                "ORDER BY id DESC LIMIT 1",
                 (self.corredor_id,),
             ).fetchone()
-        return json.loads(fila["plan"]) if fila else None
+        if not fila:
+            return None
+        return json.loads(fila["plan"]), datetime.fromisoformat(fila["creado"]).date()
 
     # ------------------------------------------------------------- resúmenes
 

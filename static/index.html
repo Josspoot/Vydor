@@ -226,6 +226,13 @@
   }
   .resumenSemana b { color: var(--texto); font-variant-numeric: tabular-nums; }
 
+  .botonTelegram {
+    display: inline-block; background: var(--panel-alto); color: var(--texto);
+    border: 1px solid #2f4a6d; border-radius: 10px; padding: 10px 15px;
+    font-size: 13.5px; font-weight: 600; text-decoration: none;
+  }
+  .botonTelegram:hover { border-color: var(--fase-normal); }
+  .pieTelegram { font-size: 12px; color: var(--apagado); margin: 7px 0 0; }
   .aviso {
     font-size: 12px; color: var(--apagado); margin-top: 20px;
     padding-top: 14px; border-top: 1px solid var(--borde);
@@ -257,6 +264,12 @@
     <div id="plan">
       <p class="vacio">Aquí aparecerá tu plan en cuanto Vydor lo arme: los ritmos a los
         que debes correr y qué hacer cada día de cada semana.</p>
+    </div>
+    <div id="telegram" hidden>
+      <a id="enlaceTelegram" class="botonTelegram" target="_blank" rel="noopener">
+        Recibir el entrenamiento cada mañana por Telegram
+      </a>
+      <p class="pieTelegram">Se abre el chat con el bot; no hay que registrarse ni copiar nada.</p>
     </div>
     <p class="aviso">
       Orientación de entrenamiento, no consejo médico. Ante dolor persistente,
@@ -726,6 +739,25 @@ function reproducir(buffer) {
 
 boton.onclick = () =>
   activo ? detener() : iniciar().catch((e) => marcar(e.message, "error"));
+
+/* El bloque de Telegram solo aparece si el servidor tiene bot configurado:
+   ofrecer un botón que no lleva a ningún sitio es peor que no ofrecerlo. */
+(async () => {
+  let corredor = localStorage.getItem("vydor-corredor");
+  if (!corredor) {
+    corredor = crypto.randomUUID();
+    localStorage.setItem("vydor-corredor", corredor);
+  }
+  try {
+    const r = await fetch(`/telegram/enlace?corredor=${corredor}`);
+    const d = await r.json();
+    if (!d.disponible) return;
+    document.getElementById("enlaceTelegram").href = d.url;
+    document.getElementById("telegram").hidden = false;
+  } catch {
+    /* sin Telegram configurado la app funciona igual */
+  }
+})();
 </script>
 </body>
 </html>

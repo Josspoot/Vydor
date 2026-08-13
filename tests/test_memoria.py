@@ -179,3 +179,18 @@ def test_el_resumen_es_prosa_no_una_ficha(memoria):
     resumen = memoria.resumen_para_prompt()
     assert "\n" not in resumen
     assert ":" not in resumen.replace("así:", "")
+
+
+def test_borrar_del_perfil_elimina_de_verdad(memoria):
+    """actualizar_perfil ignora los None; borrar exige un método propio."""
+    memoria.actualizar_perfil(codigo_telegram="abc", nombre="Ana")
+    memoria.actualizar_perfil(codigo_telegram=None)
+    assert memoria.perfil()["codigo_telegram"] == "abc", "los None no deben borrar"
+
+    memoria.borrar_del_perfil("codigo_telegram")
+    assert "codigo_telegram" not in memoria.perfil()
+    assert memoria.perfil()["nombre"] == "Ana", "no debe tocar el resto"
+
+
+def test_borrar_una_clave_inexistente_no_falla(memoria):
+    memoria.borrar_del_perfil("no_existe")
