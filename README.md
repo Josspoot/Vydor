@@ -142,6 +142,13 @@ TELEGRAM_BOT_TOKEN=...   # de @BotFather
 TELEGRAM_HORA=7          # hora local del recordatorio
 ```
 
+Para probarlo sin esperar a la hora programada:
+
+```bash
+.venv/bin/python -m app.telegram --simular   # imprime lo que saldría
+.venv/bin/python -m app.telegram             # lo envía de verdad
+```
+
 ### Sobre WhatsApp
 
 El reto lo menciona como opción para recordatorios. Se eligió **Telegram**: la

@@ -153,15 +153,53 @@ async def _atender_mensaje(mensaje: dict, ruta=None) -> None:
 # Recordatorio diario
 # --------------------------------------------------------------------------
 
-async def enviar_recordatorios(ruta=None) -> int:
-    """Manda a cada corredor vinculado su entrenamiento de hoy."""
+async def enviar_recordatorios(ruta=None, simular: bool = False) -> int:
+    """Manda a cada corredor vinculado su entrenamiento de hoy.
+
+    Con `simular` no envía nada: imprime lo que saldría. Útil para revisar la
+    redacción sin gastar mensajes ni esperar a la hora programada.
+    """
     enviados = 0
     for corredor in corredores_notificables(ruta):
         texto = recordatorio_para(corredor, ruta=ruta)
         if not texto:
             continue
         chat = Memoria(corredor, "recordatorio", ruta=ruta).perfil().get("telegram_chat_id")
-        if chat and await enviar(chat, texto):
+        if not chat:
+            continue
+        if simular:
+            print(f"\n--- para {corredor} (chat {chat}) ---\n{texto}")
+            enviados += 1
+        elif await enviar(chat, texto):
             enviados += 1
     log.info("recordatorios enviados: %d", enviados)
     return enviados
+
+
+if __name__ == "__main__":
+    # Disparo manual: el cron solo salta a la hora configurada, y para probar
+    # —o para grabar el demo— hace falta poder mandarlo ahora.
+    import sys
+    from pathlib import Path
+
+    from dotenv import load_dotenv
+
+    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+    logging.basicConfig(level="INFO", format="%(levelname)-7s %(message)s")
+
+    simular = "--simular" in sys.argv
+    if not simular and not configurado():
+        raise SystemExit(
+            "Falta TELEGRAM_BOT_TOKEN en .env. Con --simular puedes ver los "
+            "mensajes sin enviarlos."
+        )
+
+    vinculados = corredores_notificables()
+    if not vinculados:
+        raise SystemExit(
+            "Nadie vinculado todavía. Abre la web, pulsa el botón de Telegram "
+            "y habla con tu bot; luego vuelve a lanzar esto."
+        )
+
+    total = asyncio.run(enviar_recordatorios(simular=simular))
+    print(f"\n{'simulados' if simular else 'enviados'}: {total}")
