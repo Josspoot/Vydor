@@ -107,16 +107,17 @@ let fuentes = [];
 let ultimoQuien = null;
 let bytesEnviados = 0;
 let medidor = null;
+let hayVoz = false;
 
 // Sin esto no hay forma de saber si el micrófono está produciendo algo:
 // un fallo de captura y un silencio real se ven exactamente igual.
 function arrancarMedidor() {
-  let previo = 0;
   medidor = setInterval(() => {
-    const kbps = ((bytesEnviados - previo) / 1024).toFixed(1);
-    previo = bytesEnviados;
-    if (activo) marcar(`escuchando · ${kbps} KB/s al servidor`, "activo");
-  }, 1000);
+    if (!activo) return;
+    const kb = (bytesEnviados / 1024).toFixed(0);
+    marcar(hayVoz ? `hablando · ${kb} KB enviados` : `en silencio · ${kb} KB enviados`,
+           hayVoz ? "activo" : "");
+  }, 500);
 }
 
 function marcar(texto, clase = "") {
@@ -149,6 +150,15 @@ async function iniciar() {
   worklet.port.onmessage = (ev) => {
     if (ev.data.tipo === "inicio") {
       console.log(`captura iniciada a ${ev.data.tasaEntrada} Hz -> 16000 Hz`);
+      return;
+    }
+    if (ev.data.tipo === "voz") {
+      hayVoz = ev.data.activa;
+      // El servidor tiene el VAD automático desactivado: los límites del turno
+      // los marca esta compuerta, que es la que de verdad sabe cuándo hay voz.
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ tipo: "actividad", activa: ev.data.activa }));
+      }
       return;
     }
     if (ws.readyState === WebSocket.OPEN) {

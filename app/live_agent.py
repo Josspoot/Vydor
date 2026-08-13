@@ -33,9 +33,16 @@ TASA_SALIDA = 24_000
 # Tope de sesión para que un navegador olvidado abierto no consuma cuota.
 SEGUNDOS_MAX_SESION = int(os.getenv("MAX_SESSION_SECONDS", "600"))
 
+# El VAD del servidor detecta los turnos a partir del silencio final que envía
+# la compuerta del navegador. Ponerlo en manual está disponible pero no probado.
+VAD_MANUAL = os.getenv("VAD_MANUAL", "0") == "1"
+
+# Segundos que se le conceden al servidor para responder al ping del WebSocket.
+PING_TIMEOUT = int(os.getenv("WS_PING_TIMEOUT", "60"))
+
 
 def construir_config(perfil_resumen: str | None = None) -> dict:
-    return {
+    config = {
         "response_modalities": ["AUDIO"],
         "system_instruction": con_memoria(perfil_resumen),
         "tools": [{"function_declarations": esquemas.DECLARACIONES}],
@@ -45,7 +52,18 @@ def construir_config(perfil_resumen: str | None = None) -> dict:
         # Las transcripciones alimentan la memoria y el subtitulado en pantalla.
         "input_audio_transcription": {},
         "output_audio_transcription": {},
+        # El audio consume tokens muy rápido. Sin ventana deslizante, una
+        # conversación de varios minutos agota el contexto y la sesión muere.
+        "context_window_compression": {"sliding_window": {}},
     }
+    if VAD_MANUAL:
+        # El navegador marca los turnos él mismo. Más control, pero en pruebas
+        # el servidor dejó de responder a partir del segundo turno, así que
+        # no es el camino por defecto.
+        config["realtime_input_config"] = {
+            "automatic_activity_detection": {"disabled": True}
+        }
+    return config
 
 
 def crear_cliente() -> genai.Client:
@@ -55,7 +73,23 @@ def crear_cliente() -> genai.Client:
             "Falta GEMINI_API_KEY. Consigue una gratis en "
             "https://aistudio.google.com/apikey y ponla en .env"
         )
-    return genai.Client(api_key=api_key)
+    cliente = genai.Client(api_key=api_key)
+
+    # El SDK no expone la configuración de keepalive del WebSocket, pero sí
+    # reenvía este diccionario tal cual a websockets.connect(). Con el timeout
+    # por defecto (20 s) la sesión moría con "keepalive ping timeout" en cuanto
+    # había un hueco de silencio; 60 s da margen sin dejar de detectar una
+    # conexión realmente muerta.
+    # Atributo privado: si una actualización del SDK lo renombra, esto deja de
+    # aplicarse en silencio, así que se registra al arrancar.
+    try:
+        cliente._api_client._websocket_ssl_ctx["ping_timeout"] = PING_TIMEOUT
+    except (AttributeError, TypeError):
+        log.warning(
+            "no se pudo ajustar el keepalive del WebSocket: el SDK cambió su "
+            "estructura interna. Las sesiones largas pueden cortarse."
+        )
+    return cliente
 
 
 class SesionCoach:
@@ -103,13 +137,25 @@ class SesionCoach:
     async def _bombear_audio(self, recibir, sesion):
         """Navegador -> Gemini."""
         trozos = 0
-        async for trozo in recibir():
+        async for tipo, valor in recibir():
+            if tipo == "actividad":
+                if not VAD_MANUAL:
+                    continue     # el servidor deduce los turnos por sí mismo
+                if valor:
+                    await sesion.send_realtime_input(
+                        activity_start=types.ActivityStart()
+                    )
+                else:
+                    await sesion.send_realtime_input(activity_end=types.ActivityEnd())
+                log.debug("actividad de voz: %s", "inicio" if valor else "fin")
+                continue
+
             await sesion.send_realtime_input(
                 audio=types.Blob(
-                    data=trozo, mime_type=f"audio/pcm;rate={TASA_ENTRADA}"
+                    data=valor, mime_type=f"audio/pcm;rate={TASA_ENTRADA}"
                 )
             )
-            self.bytes_entrada += len(trozo)
+            self.bytes_entrada += len(valor)
             trozos += 1
             # Un micrófono que no captura y un silencio real son
             # indistinguibles sin esto.
@@ -124,6 +170,16 @@ class SesionCoach:
     async def _procesar_respuestas(self, sesion):
         """Gemini -> navegador, resolviendo herramientas por el camino."""
         async for respuesta in sesion.receive():
+            if log.isEnabledFor(logging.DEBUG):
+                sc = respuesta.server_content
+                marcas = [
+                    n for n in ("turn_complete", "interrupted", "generation_complete")
+                    if sc is not None and getattr(sc, n, None)
+                ]
+                if marcas or respuesta.tool_call or respuesta.go_away:
+                    log.debug("evento: %s%s%s", ",".join(marcas) or "-",
+                              " +tool_call" if respuesta.tool_call else "",
+                              f" +go_away({respuesta.go_away})" if respuesta.go_away else "")
             if respuesta.data:
                 await self._enviar(respuesta.data)  # audio crudo
                 self.bytes_salida += len(respuesta.data)
