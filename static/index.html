@@ -6,86 +6,258 @@
 <title>Vydor · Coach de running</title>
 <style>
   :root {
+    /* La app se compromete con un solo aspecto oscuro, no invierte con el
+       sistema: los colores de la gráfica están validados contra --panel. */
     --fondo: #0f1115;
     --panel: #171a21;
+    --panel-alto: #1e2230;
     --borde: #262b36;
     --texto: #e7e9ee;
     --tenue: #99a1b3;
+    --apagado: #6b7385;
     --acento: #4ade80;
     --alerta: #f87171;
+    --aviso: #fbbf24;
+
+    /* Serie de la gráfica. Validadas contra #171a21: banda de luminosidad,
+       piso de croma, separación CVD 8.4, visión normal 19.8, contraste >=3:1. */
+    --fase-normal: #3987e5;
+    --fase-recuperacion: #c98500;
+    --fase-afinamiento: #199e70;
+
+    --rejilla: #2c2c2a;
+    --radio: 14px;
   }
   * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
   body {
-    margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+    margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
     background: var(--fondo); color: var(--texto);
-    display: grid; grid-template-rows: auto 1fr; min-height: 100vh;
+    display: flex; flex-direction: column; min-height: 100vh;
+    line-height: 1.5;
   }
+
+  /* ------------------------------------------------------------ cabecera */
   header {
-    padding: 20px 24px; border-bottom: 1px solid var(--borde);
-    display: flex; align-items: center; gap: 16px;
+    padding: 14px 20px; border-bottom: 1px solid var(--borde);
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    background: var(--panel); position: sticky; top: 0; z-index: 10;
   }
-  h1 { font-size: 18px; margin: 0; font-weight: 600; }
-  .estado { font-size: 13px; color: var(--tenue); margin-left: auto; }
+  .marca { font-size: 16px; font-weight: 650; letter-spacing: -0.01em; }
+  .marca span { color: var(--tenue); font-weight: 400; }
+  .estado {
+    font-size: 13px; color: var(--tenue); margin-left: auto;
+    display: flex; align-items: center; gap: 7px;
+  }
   .punto {
-    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
-    background: var(--tenue); margin-right: 6px; vertical-align: middle;
+    width: 8px; height: 8px; border-radius: 50%; background: var(--apagado);
+    flex: none;
   }
   .punto.activo { background: var(--acento); box-shadow: 0 0 8px var(--acento); }
   .punto.error { background: var(--alerta); }
-  main {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
-    padding: 24px; align-items: start;
-  }
-  @media (max-width: 860px) { main { grid-template-columns: 1fr; } }
-  .panel {
-    background: var(--panel); border: 1px solid var(--borde);
-    border-radius: 12px; padding: 18px; min-height: 220px;
-  }
-  .panel h2 {
-    font-size: 12px; text-transform: uppercase; letter-spacing: .08em;
-    color: var(--tenue); margin: 0 0 14px;
-  }
   button {
     background: var(--acento); color: #06240f; border: 0; border-radius: 10px;
-    padding: 12px 22px; font-size: 15px; font-weight: 600; cursor: pointer;
+    padding: 10px 18px; font-size: 14px; font-weight: 650; cursor: pointer;
+    font-family: inherit;
   }
-  button:disabled { background: #2a2f3a; color: var(--tenue); cursor: not-allowed; }
+  button:hover { filter: brightness(1.08); }
   button.detener { background: var(--alerta); color: #2b0707; }
-  .turno { margin-bottom: 12px; line-height: 1.5; font-size: 14px; }
+
+  /* -------------------------------------------------------------- diseño */
+  main {
+    flex: 1; display: grid; gap: 16px; padding: 16px;
+    grid-template-columns: minmax(0, 380px) minmax(0, 1fr);
+    align-items: start; width: 100%; max-width: 1400px; margin: 0 auto;
+  }
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; }
+    #conversacion { max-height: 34vh; }
+  }
+  .panel {
+    background: var(--panel); border: 1px solid var(--borde);
+    border-radius: var(--radio); padding: 18px; min-width: 0;
+  }
+  .panel h2 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .09em;
+    color: var(--apagado); margin: 0 0 14px; font-weight: 600;
+  }
+
+  /* -------------------------------------------------------- conversación */
+  #conversacion { max-height: 66vh; overflow-y: auto; overscroll-behavior: contain; }
+  .turno { margin-bottom: 14px; font-size: 14px; }
   .turno .quien {
-    font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
-    color: var(--tenue); display: block; margin-bottom: 2px;
+    font-size: 10px; text-transform: uppercase; letter-spacing: .07em;
+    color: var(--apagado); display: block; margin-bottom: 3px; font-weight: 600;
   }
   .turno.coach .quien { color: var(--acento); }
-  #conversacion { max-height: 60vh; overflow-y: auto; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--borde); }
-  th { color: var(--tenue); font-weight: 500; font-size: 11px; text-transform: uppercase; }
-  .fase-descarga td { color: #fbbf24; }
-  .fase-carrera td { color: var(--acento); font-weight: 600; }
+  .turno.sistema { color: var(--tenue); font-style: italic; font-size: 13px; }
+
+  /* --------------------------------------------------------------- vacío */
   .vacio { color: var(--tenue); font-size: 14px; }
+  .vacio strong { color: var(--texto); font-weight: 600; }
+  .ejemplos { margin: 14px 0 0; padding: 0; list-style: none; }
+  .ejemplos li {
+    font-size: 13px; color: var(--tenue); padding: 9px 12px; margin-bottom: 7px;
+    background: var(--panel-alto); border-radius: 9px; border: 1px solid var(--borde);
+  }
+  .ejemplos li::before { content: "“"; }
+  .ejemplos li::after { content: "”"; }
+
+  /* ---------------------------------------------------------- resumen del plan */
+  .hero {
+    display: flex; flex-wrap: wrap; gap: 20px 28px; align-items: flex-end;
+    padding-bottom: 16px; margin-bottom: 16px;
+    border-bottom: 1px solid var(--borde);
+  }
+  .cifra { display: flex; flex-direction: column; gap: 2px; }
+  .cifra .valor { font-size: 30px; font-weight: 680; letter-spacing: -0.02em; }
+  .cifra .rotulo {
+    font-size: 11px; color: var(--apagado); text-transform: uppercase;
+    letter-spacing: .07em; font-weight: 600;
+  }
+  .veredicto {
+    display: flex; gap: 10px; align-items: flex-start; font-size: 13.5px;
+    padding: 12px 14px; border-radius: 10px; margin-bottom: 22px;
+    background: var(--panel-alto); border: 1px solid var(--borde);
+  }
+  .veredicto .icono { font-size: 15px; line-height: 1.35; flex: none; }
+  .veredicto.viable { border-color: #1c5c33; }
+  .veredicto.ajustado { border-color: #6b5312; }
+  .veredicto.no_recomendado { border-color: #6b2020; }
+  .veredicto b { display: block; margin-bottom: 2px; }
+
+  /* -------------------------------------------------------------- ritmos */
+  .bloque { margin-bottom: 24px; }
+  .bloque > h3 {
+    font-size: 13px; margin: 0 0 4px; font-weight: 650;
+  }
+  .bloque > .pie { font-size: 12.5px; color: var(--tenue); margin: 0 0 12px; }
+  .ritmos { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+  .ritmo {
+    background: var(--panel-alto); border: 1px solid var(--borde);
+    border-radius: 10px; padding: 11px 13px;
+  }
+  .ritmo .cab { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .ritmo .zona { font-size: 13px; font-weight: 650; }
+  .ritmo .valor { font-size: 14px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .ritmo .desc { font-size: 12px; color: var(--tenue); margin-top: 4px; }
+
+  /* ------------------------------------------------------------- gráfica */
+  .grafica { position: relative; padding-left: 34px; }
+  .ejeY {
+    position: absolute; left: 0; top: 0; bottom: 22px; width: 32px;
+    font-size: 10px; color: var(--apagado); font-variant-numeric: tabular-nums;
+  }
+  .ejeY span { position: absolute; right: 0; transform: translateY(-50%); }
+  .lienzo {
+    position: relative; height: 132px; display: flex; align-items: flex-end;
+    gap: 2px; border-bottom: 1px solid var(--rejilla);
+  }
+  .rejilla { position: absolute; inset: 0; pointer-events: none; }
+  .rejilla i { position: absolute; left: 0; right: 0; border-top: 1px solid var(--rejilla); }
+  .barra {
+    flex: 1 1 0; min-width: 0; position: relative; cursor: pointer;
+    border-radius: 4px 4px 0 0; background: var(--fase-normal);
+    transition: filter .12s;
+  }
+  .barra.recuperacion { background: var(--fase-recuperacion); }
+  .barra.afinamiento  { background: var(--fase-afinamiento); }
+  .barra:hover { filter: brightness(1.25); }
+  .barra.sel { outline: 2px solid var(--texto); outline-offset: 1px; }
+  .ejeX {
+    display: flex; gap: 2px; margin-top: 6px;
+    font-size: 10px; color: var(--apagado); font-variant-numeric: tabular-nums;
+  }
+  .ejeX span { flex: 1 1 0; text-align: center; min-width: 0; overflow: hidden; }
+  .leyenda {
+    display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 12px;
+    font-size: 12px; color: var(--tenue);
+  }
+  .leyenda i {
+    display: inline-block; width: 9px; height: 9px; border-radius: 2px;
+    margin-right: 6px; vertical-align: middle;
+  }
+  #globo {
+    position: fixed; z-index: 30; pointer-events: none; opacity: 0;
+    background: var(--panel-alto); border: 1px solid var(--borde);
+    border-radius: 9px; padding: 8px 11px; font-size: 12.5px;
+    box-shadow: 0 6px 20px rgba(0,0,0,.45); transition: opacity .1s;
+    max-width: 220px;
+  }
+  #globo b { display: block; margin-bottom: 2px; }
+  #globo .m { color: var(--tenue); }
+
+  /* ------------------------------------------------------- semana a semana */
+  .fichas { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 14px; }
+  .ficha {
+    background: var(--panel-alto); border: 1px solid var(--borde); color: var(--tenue);
+    border-radius: 8px; padding: 5px 10px; font-size: 12.5px; cursor: pointer;
+    font-family: inherit; font-variant-numeric: tabular-nums;
+  }
+  .ficha:hover { color: var(--texto); }
+  .ficha[aria-pressed="true"] {
+    background: var(--texto); border-color: var(--texto); color: var(--fondo);
+    font-weight: 650;
+  }
+  .dias { display: grid; gap: 6px; }
+  .dia {
+    display: grid; grid-template-columns: 82px 1fr auto; gap: 12px;
+    align-items: baseline; padding: 11px 13px; border-radius: 10px;
+    background: var(--panel-alto); border: 1px solid var(--borde);
+    font-size: 13.5px;
+  }
+  @media (max-width: 560px) {
+    .dia { grid-template-columns: 1fr auto; }
+    .dia .nombre { grid-column: 1 / -1; }
+  }
+  .dia.descanso { opacity: .55; }
+  .dia.clave { border-color: #2f4a6d; }
+  .dia.carrera { border-color: var(--acento); }
+  .dia .nombre {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--apagado); font-weight: 600;
+  }
+  .dia .que { font-weight: 600; }
+  .dia .detalle { font-weight: 400; color: var(--tenue); display: block; font-size: 12.5px; margin-top: 2px; }
+  .dia .km { font-variant-numeric: tabular-nums; color: var(--tenue); font-size: 12.5px; white-space: nowrap; }
+  .resumenSemana {
+    display: flex; gap: 18px; flex-wrap: wrap; font-size: 12.5px;
+    color: var(--tenue); margin-bottom: 12px;
+  }
+  .resumenSemana b { color: var(--texto); font-variant-numeric: tabular-nums; }
+
   .aviso {
-    font-size: 12px; color: var(--tenue); margin-top: 14px;
-    padding-top: 12px; border-top: 1px solid var(--borde);
+    font-size: 12px; color: var(--apagado); margin-top: 20px;
+    padding-top: 14px; border-top: 1px solid var(--borde);
   }
 </style>
 </head>
 <body>
 <header>
-  <h1>Vydor · entrenador de running</h1>
+  <div class="marca">Vydor <span>· entrenador de running</span></div>
   <button id="boton">Hablar con Vydor</button>
-  <span class="estado"><span class="punto" id="punto"></span><span id="estado">desconectado</span></span>
+  <div class="estado"><span class="punto" id="punto"></span><span id="estado">desconectado</span></div>
 </header>
 
 <main>
   <section class="panel">
     <h2>Conversación</h2>
-    <div id="conversacion"><p class="vacio">Pulsa «Hablar con Vydor» y cuéntale qué carrera tienes en mente.</p></div>
+    <div id="conversacion">
+      <p class="vacio">Pulsa <strong>Hablar con Vydor</strong> y cuéntale qué carrera tienes en mente.</p>
+      <ul class="ejemplos">
+        <li>Quiero correr un 10K en 12 semanas</li>
+        <li>Corro 25 kilómetros por semana y puedo entrenar 4 días</li>
+        <li>Me duele la rodilla desde el martes</li>
+      </ul>
+    </div>
   </section>
 
   <section class="panel">
-    <h2>Plan de entrenamiento</h2>
-    <div id="plan"><p class="vacio">Aquí aparecerá tu plan cuando Vydor lo genere.</p></div>
+    <h2>Tu plan</h2>
+    <div id="plan">
+      <p class="vacio">Aquí aparecerá tu plan en cuanto Vydor lo arme: los ritmos a los
+        que debes correr y qué hacer cada día de cada semana.</p>
+    </div>
     <p class="aviso">
       Orientación de entrenamiento, no consejo médico. Ante dolor persistente,
       consulta a un profesional de la salud.
@@ -93,12 +265,15 @@
   </section>
 </main>
 
+<div id="globo" role="status"></div>
+
 <script>
 const boton = document.getElementById("boton");
 const estado = document.getElementById("estado");
 const punto = document.getElementById("punto");
 const conversacion = document.getElementById("conversacion");
 const panelPlan = document.getElementById("plan");
+const globo = document.getElementById("globo");
 
 let ws, ctxEntrada, ctxSalida, micro, worklet;
 let activo = false;
@@ -110,8 +285,260 @@ let medidor = null;
 let hayVoz = false;
 let estadoTurno = "escuchando";
 let finReproduccion = 0;
+let planActual = null;
+let semanaVista = 0;
 
-/** ¿Está el coach pensando o todavía sonando por los altavoces? */
+/* ====================================================================
+   Traducción del vocabulario de entrenador a lenguaje de a pie.
+   El motor habla en jerga; quien lee el plan puede no haber corrido nunca.
+   ==================================================================== */
+const NOMBRE_DIA = ["", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
+
+const NOMBRE_TIPO = {
+  descanso: "Descanso",
+  facil: "Rodaje suave",
+  largo: "Fondo largo",
+  tempo: "Ritmo controlado",
+  intervalos: "Series rápidas",
+  ritmo_objetivo: "Ritmo de carrera",
+  carrera: "¡Día de carrera!",
+};
+
+const NOMBRE_ZONA = {
+  facil: "Fácil",
+  maraton: "Ritmo de maratón",
+  umbral: "Umbral",
+  intervalo: "Intervalos",
+  repeticion: "Repeticiones",
+};
+
+// Las cinco fases del motor se agrupan en tres para la gráfica: al corredor le
+// importa si la semana suma, si toca recuperar, o si ya está afinando.
+const GRUPO_FASE = {
+  base: "normal", construccion: "normal",
+  descarga: "recuperacion",
+  afinamiento: "afinamiento", carrera: "afinamiento",
+};
+const NOMBRE_FASE = {
+  base: "Base", construccion: "Construcción", descarga: "Semana de recuperación",
+  afinamiento: "Afinamiento", carrera: "Semana de carrera",
+};
+const LEYENDA = [
+  ["normal", "Semanas que suman carga"],
+  ["recuperacion", "Recuperación: bajas para asimilar"],
+  ["afinamiento", "Afinamiento y carrera"],
+];
+
+const VEREDICTO = {
+  viable: { icono: "✓", titulo: "El objetivo es realista" },
+  ajustado: { icono: "!", titulo: "Se puede, pero con margen justo" },
+  no_recomendado: { icono: "✕", titulo: "Este objetivo es arriesgado" },
+};
+
+function esc(t) {
+  return String(t).replace(/[&<>"]/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+
+const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.round(s) % 60).padStart(2, "0")}`;
+
+function tiempoHablado(seg) {
+  const h = Math.floor(seg / 3600);
+  const m = Math.round((seg % 3600) / 60);
+  return h ? `${h}h ${String(m).padStart(2, "0")}m` : `${m} min`;
+}
+
+/* ==================================================== dibujar el plan ==== */
+
+function dibujarPlan(plan) {
+  planActual = plan;
+  // Se abre en la primera semana: es la que el corredor hará ahora.
+  semanaVista = 0;
+  panelPlan.innerHTML = seccionResumen(plan) + seccionRitmos(plan) +
+                        seccionGrafica(plan) + '<div class="bloque" id="detalleSemana"></div>';
+  conectarGrafica();
+  pintarSemana();
+}
+
+function seccionResumen(plan) {
+  const v = plan.viabilidad;
+  const meta = VEREDICTO[v.veredicto] || VEREDICTO.ajustado;
+  const objetivo = plan.tiempo_objetivo_s
+    ? `<div class="cifra"><span class="valor">${tiempoHablado(plan.tiempo_objetivo_s)}</span>
+         <span class="rotulo">Tiempo alcanzable</span></div>` : "";
+
+  return `
+    <div class="hero">
+      <div class="cifra">
+        <span class="valor">${esc(plan.distancia.toUpperCase())}</span>
+        <span class="rotulo">Tu carrera</span>
+      </div>
+      <div class="cifra">
+        <span class="valor">${plan.semanas}</span>
+        <span class="rotulo">Semanas de plan</span>
+      </div>
+      <div class="cifra">
+        <span class="valor">${plan.dias_por_semana}</span>
+        <span class="rotulo">Días por semana</span>
+      </div>
+      ${objetivo}
+    </div>
+    <div class="veredicto ${v.veredicto}">
+      <span class="icono">${meta.icono}</span>
+      <span><b>${meta.titulo}</b>${esc(v.razon)}</span>
+    </div>`;
+}
+
+function seccionRitmos(plan) {
+  const zonas = Object.entries(plan.ritmos || {});
+  if (!zonas.length) {
+    return `<div class="bloque">
+      <h3>Tus ritmos</h3>
+      <p class="pie">Todavía no los tenemos. Dile a Vydor una marca reciente
+      —por ejemplo, cuánto tardaste en tu último 10K— y calculará a qué ritmo
+      debes correr cada tipo de entrenamiento.</p></div>`;
+  }
+  const tarjetas = zonas.map(([zona, r]) => `
+    <div class="ritmo">
+      <div class="cab">
+        <span class="zona">${esc(NOMBRE_ZONA[zona] || zona)}</span>
+        <span class="valor">${esc(formatoRitmo(r))}</span>
+      </div>
+      <div class="desc">${esc(r.descripcion)}</div>
+    </div>`).join("");
+
+  return `<div class="bloque">
+    <h3>Tus ritmos${plan.vdot ? ` <span style="color:var(--apagado);font-weight:400">· VDOT ${plan.vdot}</span>` : ""}</h3>
+    <p class="pie">Minutos por kilómetro. Salen de tu marca real, no de una tabla genérica.</p>
+    <div class="ritmos">${tarjetas}</div>
+  </div>`;
+}
+
+function formatoRitmo(r) {
+  return r.seg_por_km_rapido === r.seg_por_km_lento
+    ? mmss(r.seg_por_km_rapido)
+    : `${mmss(r.seg_por_km_rapido)}–${mmss(r.seg_por_km_lento)}`;
+}
+
+function seccionGrafica(plan) {
+  const semanas = plan.semanas_plan;
+  const tope = Math.max(...semanas.map((s) => s.km_total));
+  // Escala redondeada a la decena superior, para que las guías sean cifras limpias.
+  const techo = Math.ceil(tope / 10) * 10;
+
+  const barras = semanas.map((s, i) => {
+    const alto = Math.max(3, (s.km_total / techo) * 100);
+    return `<div class="barra ${GRUPO_FASE[s.fase]}" style="height:${alto}%"
+              data-i="${i}" role="button" tabindex="0"
+              aria-label="Semana ${s.numero}, ${s.km_total} kilómetros, ${NOMBRE_FASE[s.fase]}"></div>`;
+  }).join("");
+
+  // Una etiqueta cada pocas semanas: con 18 no caben todas sin amontonarse.
+  const paso = semanas.length > 12 ? 4 : 2;
+  const ejeX = semanas.map((s, i) =>
+    `<span>${i === 0 || (i + 1) % paso === 0 ? s.numero : ""}</span>`).join("");
+
+  const guias = [0.5, 1].map((f) =>
+    `<i style="top:${(1 - f) * 100}%"></i>`).join("");
+  const marcasY = [0.5, 1].map((f) =>
+    `<span style="top:${(1 - f) * 100}%">${Math.round(techo * f)}</span>`).join("");
+
+  const leyenda = LEYENDA.map(([clase, texto]) =>
+    `<span><i style="background:var(--fase-${clase})"></i>${texto}</span>`).join("");
+
+  return `<div class="bloque">
+    <h3>Cómo avanza tu plan</h3>
+    <p class="pie">Kilómetros por semana. No sube en línea recta a propósito:
+      cada pocas semanas baja para que el cuerpo asimile la carga.</p>
+    <div class="grafica">
+      <div class="ejeY">${marcasY}</div>
+      <div class="lienzo" id="lienzo">
+        <div class="rejilla">${guias}</div>
+        ${barras}
+      </div>
+      <div class="ejeX">${ejeX}</div>
+    </div>
+    <div class="leyenda">${leyenda}</div>
+  </div>`;
+}
+
+function conectarGrafica() {
+  const lienzo = document.getElementById("lienzo");
+  if (!lienzo) return;
+
+  lienzo.querySelectorAll(".barra").forEach((barra) => {
+    const i = +barra.dataset.i;
+    const elegir = () => { semanaVista = i; pintarSemana(); };
+    barra.addEventListener("click", elegir);
+    barra.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); elegir(); }
+    });
+    barra.addEventListener("mouseenter", (e) => mostrarGlobo(e, i));
+    barra.addEventListener("mousemove", (e) => colocarGlobo(e));
+    barra.addEventListener("mouseleave", () => (globo.style.opacity = 0));
+  });
+}
+
+function mostrarGlobo(ev, i) {
+  const s = planActual.semanas_plan[i];
+  globo.innerHTML = `<b>Semana ${s.numero} · ${NOMBRE_FASE[s.fase]}</b>
+    <span class="m">${s.km_total.toFixed(1)} km en total` +
+    (s.km_fondo > 0 ? ` · fondo de ${s.km_fondo.toFixed(1)} km` : "") + `</span>`;
+  globo.style.opacity = 1;
+  colocarGlobo(ev);
+}
+
+function colocarGlobo(ev) {
+  const ancho = globo.offsetWidth;
+  const x = Math.min(Math.max(ev.clientX - ancho / 2, 8), innerWidth - ancho - 8);
+  globo.style.left = x + "px";
+  globo.style.top = (ev.clientY - globo.offsetHeight - 12) + "px";
+}
+
+function pintarSemana() {
+  const destino = document.getElementById("detalleSemana");
+  if (!destino || !planActual) return;
+
+  const semanas = planActual.semanas_plan;
+  const s = semanas[semanaVista];
+
+  document.querySelectorAll(".barra").forEach((b) =>
+    b.classList.toggle("sel", +b.dataset.i === semanaVista));
+
+  const fichas = semanas.map((x, i) =>
+    `<button class="ficha" data-i="${i}" aria-pressed="${i === semanaVista}">${x.numero}</button>`
+  ).join("");
+
+  const dias = s.sesiones.map((ses) => {
+    const clase = ses.tipo === "descanso" ? "descanso"
+      : ses.tipo === "carrera" ? "carrera"
+      : ["tempo", "intervalos", "ritmo_objetivo", "largo"].includes(ses.tipo) ? "clave" : "";
+    const km = ses.km > 0 ? `${ses.km.toFixed(1)} km` : "";
+    return `<div class="dia ${clase}">
+      <span class="nombre">${NOMBRE_DIA[ses.dia]}</span>
+      <span class="que">${esc(NOMBRE_TIPO[ses.tipo] || ses.tipo)}
+        <span class="detalle">${esc(ses.detalle)}</span></span>
+      <span class="km">${km}</span>
+    </div>`;
+  }).join("");
+
+  destino.innerHTML = `
+    <h3>Semana a semana</h3>
+    <p class="pie">Toca una semana para ver qué toca cada día.</p>
+    <div class="fichas">${fichas}</div>
+    <div class="resumenSemana">
+      <span>Semana ${s.numero} de ${planActual.semanas} · <b>${NOMBRE_FASE[s.fase]}</b></span>
+      <span>Total: <b>${s.km_total.toFixed(1)} km</b></span>
+      ${s.km_fondo > 0 ? `<span>Fondo: <b>${s.km_fondo.toFixed(1)} km</b></span>` : ""}
+    </div>
+    <div class="dias">${dias}</div>`;
+
+  destino.querySelectorAll(".ficha").forEach((f) =>
+    f.addEventListener("click", () => { semanaVista = +f.dataset.i; pintarSemana(); }));
+}
+
+/* ================================================== voz y conexión ==== */
+
 function coachOcupado() {
   if (estadoTurno === "pensando") return true;
   // Un margen tras la última muestra programada: la cola del altavoz sigue
@@ -119,8 +546,6 @@ function coachOcupado() {
   return !!ctxSalida && ctxSalida.currentTime < finReproduccion + 0.4;
 }
 
-// Sin esto no hay forma de saber si el micrófono está produciendo algo:
-// un fallo de captura y un silencio real se ven exactamente igual.
 function arrancarMedidor() {
   medidor = setInterval(() => {
     if (!activo) return;
@@ -208,7 +633,7 @@ async function iniciar() {
   bytesEnviados = 0;
   boton.textContent = "Terminar";
   boton.classList.add("detener");
-  marcar("escuchando", "activo");
+  marcar("listo, habla cuando quieras", "activo");
   arrancarMedidor();
 }
 
@@ -247,7 +672,6 @@ function manejarJson(msg) {
       dibujarPlan(msg.plan);
       break;
     case "interrumpido":
-      // El corredor habló encima: descartamos lo que quedaba por sonar.
       fuentes.forEach((f) => { try { f.stop(); } catch {} });
       fuentes = [];
       siguienteInicio = 0;
@@ -263,13 +687,14 @@ function manejarJson(msg) {
 
 function escribirTurno(quien, texto) {
   conversacion.querySelector(".vacio")?.remove();
+  conversacion.querySelector(".ejemplos")?.remove();
   // La API va transcribiendo por fragmentos: se anexan al mismo turno.
   if (quien === ultimoQuien) {
     conversacion.lastElementChild.querySelector(".texto").textContent += texto;
   } else {
     const div = document.createElement("div");
     div.className = `turno ${quien}`;
-    div.innerHTML = `<span class="quien">${quien}</span><span class="texto"></span>`;
+    div.innerHTML = `<span class="quien">${quien === "corredor" ? "Tú" : quien === "coach" ? "Vydor" : "Sistema"}</span><span class="texto"></span>`;
     div.querySelector(".texto").textContent = texto;
     conversacion.appendChild(div);
     ultimoQuien = quien;
@@ -297,40 +722,6 @@ function reproducir(buffer) {
 
   fuentes.push(fuente);
   fuente.onended = () => (fuentes = fuentes.filter((f) => f !== fuente));
-}
-
-function dibujarPlan(plan) {
-  const v = plan.viabilidad;
-  const filas = plan.semanas_plan
-    .map(
-      (s) => `<tr class="fase-${s.fase}">
-        <td>${s.numero}</td><td>${s.fase}</td>
-        <td>${s.km_total.toFixed(1)}</td><td>${s.km_fondo.toFixed(1)}</td></tr>`
-    )
-    .join("");
-
-  const ritmos = Object.entries(plan.ritmos || {})
-    .map(([zona, r]) => `<tr><td>${zona}</td><td>${formatoRitmo(r)} /km</td></tr>`)
-    .join("");
-
-  panelPlan.innerHTML = `
-    <p><strong>${plan.distancia}</strong> · ${plan.semanas} semanas ·
-       ${plan.dias_por_semana} días/semana
-       ${plan.vdot ? `· VDOT ${plan.vdot}` : ""}</p>
-    <p style="color:${v.veredicto === "viable" ? "var(--acento)" : "#fbbf24"};font-size:13px">
-       ${v.veredicto.toUpperCase()}: ${v.razon}</p>
-    ${ritmos ? `<table><tr><th>Zona</th><th>Ritmo</th></tr>${ritmos}</table><br>` : ""}
-    <table>
-      <tr><th>Sem</th><th>Fase</th><th>km</th><th>Fondo</th></tr>
-      ${filas}
-    </table>`;
-}
-
-function formatoRitmo(r) {
-  const mmss = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-  return r.seg_por_km_rapido === r.seg_por_km_lento
-    ? mmss(r.seg_por_km_rapido)
-    : `${mmss(r.seg_por_km_rapido)}–${mmss(r.seg_por_km_lento)}`;
 }
 
 boton.onclick = () =>
