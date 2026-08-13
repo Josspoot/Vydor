@@ -13,13 +13,15 @@ import time
 from collections import defaultdict, deque
 from contextlib import suppress
 from pathlib import Path
+from uuid import uuid4
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.live_agent import SesionCoach
+from app.live_agent import ConversacionCoach
+from app.memoria import Memoria
 
 # Ruta explícita: load_dotenv() busca desde el directorio actual, así que el
 # servidor fallaba según desde dónde se arrancara.
@@ -103,8 +105,8 @@ async def websocket_coach(ws: WebSocket):
                     await entrantes.put(("audio", datos))
                 elif (texto := mensaje.get("text")) is not None:
                     evento = json.loads(texto)
-                    if evento.get("tipo") == "actividad":
-                        await entrantes.put(("actividad", bool(evento["activa"])))
+                    if evento.get("tipo") == "fin_turno":
+                        await entrantes.put(("fin_turno", None))
         except (WebSocketDisconnect, RuntimeError):
             pass
         except (ValueError, KeyError) as exc:
@@ -145,7 +147,13 @@ async def websocket_coach(ws: WebSocket):
             except (WebSocketDisconnect, RuntimeError):
                 break
 
-    sesion = SesionCoach(enviar)
+    # El corredor se identifica con un id que el navegador guarda en
+    # localStorage. Suficiente para el demo: sin cuentas ni contraseñas, pero
+    # la memoria entre conversaciones funciona en el mismo dispositivo.
+    corredor = (ws.query_params.get("corredor") or "").strip()[:64] or f"anon-{ip}"
+    memoria = Memoria(corredor, conversacion=uuid4().hex)
+
+    sesion = ConversacionCoach(enviar, memoria)
     lector = asyncio.create_task(leer_del_navegador())
     escritor = asyncio.create_task(escribir_al_navegador())
 
@@ -177,11 +185,10 @@ async def websocket_coach(ws: WebSocket):
         with suppress(Exception):
             await ws.close()
         log.info(
-            "sesión cerrada | %d turnos transcritos | %.1f KB del navegador | "
-            "%.1f KB de audio devuelto%s",
-            len(sesion.transcripcion),
-            sesion.bytes_entrada / 1024,
-            sesion.bytes_salida / 1024,
+            "conversación cerrada | corredor %s | %d turnos | %.1f KB entrada | "
+            "%.1f KB salida%s",
+            corredor, sesion.turnos,
+            sesion.bytes_entrada / 1024, sesion.bytes_salida / 1024,
             f" | {descartados} trozos descartados" if descartados else "",
         )
         if sesion.bytes_entrada == 0:

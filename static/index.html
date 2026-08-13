@@ -108,15 +108,16 @@ let ultimoQuien = null;
 let bytesEnviados = 0;
 let medidor = null;
 let hayVoz = false;
+let estadoTurno = "escuchando";
 
 // Sin esto no hay forma de saber si el micrófono está produciendo algo:
 // un fallo de captura y un silencio real se ven exactamente igual.
 function arrancarMedidor() {
   medidor = setInterval(() => {
     if (!activo) return;
-    const kb = (bytesEnviados / 1024).toFixed(0);
-    marcar(hayVoz ? `hablando · ${kb} KB enviados` : `en silencio · ${kb} KB enviados`,
-           hayVoz ? "activo" : "");
+    if (estadoTurno === "pensando") marcar("Vydor está respondiendo…", "activo");
+    else if (hayVoz) marcar("te escucho…", "activo");
+    else marcar("listo, habla cuando quieras");
   }, 500);
 }
 
@@ -130,7 +131,15 @@ async function iniciar() {
     audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
   });
 
-  ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
+  // Id estable por dispositivo: es lo que permite que el coach recuerde al
+  // corredor en la siguiente conversación, sin cuentas ni contraseñas.
+  let corredor = localStorage.getItem("vydor-corredor");
+  if (!corredor) {
+    corredor = crypto.randomUUID();
+    localStorage.setItem("vydor-corredor", corredor);
+  }
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  ws = new WebSocket(`${proto}://${location.host}/ws?corredor=${corredor}`);
   ws.binaryType = "arraybuffer";
 
   ws.onmessage = (ev) =>
@@ -154,10 +163,10 @@ async function iniciar() {
     }
     if (ev.data.tipo === "voz") {
       hayVoz = ev.data.activa;
-      // El servidor tiene el VAD automático desactivado: los límites del turno
-      // los marca esta compuerta, que es la que de verdad sabe cuándo hay voz.
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ tipo: "actividad", activa: ev.data.activa }));
+      // Al cerrarse la compuerta el turno está completo: el servidor abre una
+      // sesión de Gemini con este audio y el historial de la conversación.
+      if (!hayVoz && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ tipo: "fin_turno" }));
       }
       return;
     }
@@ -202,7 +211,14 @@ function detener() {
 function manejarJson(msg) {
   switch (msg.tipo) {
     case "listo":
-      marcar("escuchando", "activo");
+      estadoTurno = "escuchando";
+      if (msg.conocido) escribirTurno("sistema", "Vydor ya te conoce de antes.");
+      break;
+    case "pensando":
+      estadoTurno = "pensando";
+      break;
+    case "turno_listo":
+      estadoTurno = "escuchando";
       break;
     case "transcripcion":
       escribirTurno(msg.quien, msg.texto);

@@ -118,7 +118,9 @@ DECLARACIONES = [
         "description": (
             "OBLIGATORIA cuando el corredor mencione cualquier dolor, molestia o "
             "lesión. Nunca des consejo sobre dolor sin llamar a esta función. "
-            "Si faltan datos, pregunta al corredor antes de llamarla."
+            "Necesita saber si duele en reposo, si le hace cojear y si mejora al "
+            "calentar: pregúntaselo al corredor de una pregunta a la vez. Sin "
+            "esos datos la función no evalúa y te pedirá que preguntes."
         ),
         "parameters": {
             "type": "OBJECT",
@@ -154,7 +156,9 @@ DECLARACIONES = [
                     "description": "Señales de alarma general presentes.",
                 },
             },
-            "required": ["zona"],
+            "required": [
+                "zona", "duele_en_reposo", "cambia_la_pisada", "mejora_al_calentar",
+            ],
         },
     },
 ]
@@ -260,14 +264,37 @@ def _predecir_marca(**kw) -> dict:
     }
 
 
+# Sin estos datos no hay triaje posible: decidirlos por defecto convierte
+# cualquier dolor sin explorar en "molestia normal".
+DATOS_MINIMOS_SINTOMA = ("duele_en_reposo", "cambia_la_pisada", "mejora_al_calentar")
+
+
 def _evaluar_sintoma(**kw) -> dict:
+    faltan = [c for c in DATOS_MINIMOS_SINTOMA if kw.get(c) is None]
+    if faltan:
+        preguntas = {
+            "duele_en_reposo": "si le duele estando sentado o acostado, sin correr",
+            "cambia_la_pisada": "si le hace cojear o cambiar la forma de correr",
+            "mejora_al_calentar": "si mejora tras los primeros minutos de trote",
+        }
+        return {
+            "faltan_datos": faltan,
+            "instruccion": (
+                "No puedes evaluar este dolor todavía. Pregúntale al corredor "
+                + "; ".join(preguntas[c] for c in faltan)
+                + ". Pregunta de una en una, en tono normal, y vuelve a llamar "
+                "a esta función con las respuestas. No des ningún consejo ni "
+                "rutina mientras tanto."
+            ),
+        }
+
     ev = sintomas.evaluar_sintoma(
         zona=kw["zona"],
         dias_con_sintoma=int(kw.get("dias_con_sintoma") or 1),
-        duele_en_reposo=bool(kw.get("duele_en_reposo", False)),
-        cambia_la_pisada=bool(kw.get("cambia_la_pisada", False)),
+        duele_en_reposo=bool(kw["duele_en_reposo"]),
+        cambia_la_pisada=bool(kw["cambia_la_pisada"]),
         dolor_punzante_localizado=bool(kw.get("dolor_punzante_localizado", False)),
-        mejora_al_calentar=bool(kw.get("mejora_al_calentar", True)),
+        mejora_al_calentar=bool(kw["mejora_al_calentar"]),
         hinchazon=bool(kw.get("hinchazon", False)),
         sintomas_sistemicos=kw.get("sintomas_sistemicos") or [],
     )

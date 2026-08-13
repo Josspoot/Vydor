@@ -10,13 +10,10 @@
  *
  * 2. Convierte a PCM de 16 bits little-endian.
  *
- * 3. Detecta si hay voz, para el indicador de la interfaz.
- *
- * La detección NO corta el envío. Se intentó, y el VAD del servidor dejaba de
- * reconocer turnos a partir del segundo: la Live API espera un flujo continuo
- * y los huecos la desincronizan. El ahorro además era mínimo, porque el audio
- * de entrada se cobra por minuto de sesión y no por byte: en una conversación
- * de cinco minutos la diferencia son un par de centavos.
+ * 3. Delimita los turnos. Como el servidor abre una sesión de Gemini por cada
+ *    intervención, alguien tiene que decidir dónde empieza y dónde acaba: eso
+ *    es esta compuerta. Solo se envía audio mientras hay voz, y al cerrarse
+ *    avisa para que el servidor procese el turno.
  */
 const TASA_DESTINO = 16000;
 const MUESTRAS_POR_ENVIO = 1600;      // 100 ms a 16 kHz
@@ -26,9 +23,12 @@ const MUESTRAS_POR_ENVIO = 1600;      // 100 ms a 16 kHz
 const RMS_MINIMO = 0.008;
 // Cuánto debe superar al ruido de fondo para considerarse voz.
 const FACTOR_SOBRE_RUIDO = 2.5;
-// Cuánto se mantiene el indicador de "hablando" tras callar, para que no
-// parpadee entre palabras.
-const COLA_MS = 800;
+// Margen antes de dar el turno por terminado. Corto parte las frases en cuanto
+// alguien duda; largo hace que el coach tarde en arrancar.
+const COLA_MS = 900;
+// Se guardan bloques anteriores al disparo: la compuerta siempre reacciona
+// tarde y sin esto se pierde la primera sílaba.
+const PREVIO_BLOQUES = 4;
 
 class CapturaPCM extends AudioWorkletProcessor {
   constructor() {
@@ -42,6 +42,8 @@ class CapturaPCM extends AudioWorkletProcessor {
     this.pisoRuido = 0.01;
     this.hablando = false;
     this.bloquesDeCola = 0;
+    this.previos = [];
+    this.cerrarTrasEmitir = false;
     this.port.postMessage({ tipo: "inicio", tasaEntrada: sampleRate });
   }
 
@@ -69,7 +71,7 @@ class CapturaPCM extends AudioWorkletProcessor {
       this.bloquesDeCola--;
       if (this.bloquesDeCola === 0) {
         this.hablando = false;
-        // El aviso de fin se emite DESPUÉS del último bloque, no antes:
+        // El fin de turno se avisa DESPUÉS del último bloque, no antes: si no,
         // el servidor cerraría el turno dejando fuera audio ya capturado.
         this.cerrarTrasEmitir = true;
       }
@@ -79,8 +81,16 @@ class CapturaPCM extends AudioWorkletProcessor {
   }
 
   _emitir(bloque) {
-    // El estado de voz solo alimenta el indicador; el audio sale siempre.
-    this._evaluar(bloque);
+    if (!this._evaluar(bloque)) {
+      this.previos.push(bloque);
+      if (this.previos.length > PREVIO_BLOQUES) this.previos.shift();
+      return;
+    }
+
+    for (const anterior of this.previos) {
+      this.port.postMessage(anterior.buffer, [anterior.buffer]);
+    }
+    this.previos = [];
     this.port.postMessage(bloque.buffer, [bloque.buffer]);
 
     if (this.cerrarTrasEmitir) {

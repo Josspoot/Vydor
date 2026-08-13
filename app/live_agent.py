@@ -1,11 +1,25 @@
-"""Puente bidireccional entre el navegador y Gemini Live API.
+"""Puente entre el navegador y Gemini Live API, con una sesión por turno.
 
-Flujo:
-    navegador --PCM 16 kHz--> este módulo --> Gemini Live
-    navegador <--PCM 24 kHz-- este módulo <-- Gemini Live
+Por qué una sesión por turno y no una continua, que sería lo natural:
 
-Las llamadas a herramientas se resuelven aquí contra el motor determinista y
-se devuelven al modelo dentro de la misma sesión.
+La Live API responde una vez y después queda inerte. Sigue aceptando audio,
+no cierra la conexión ni envía GO_AWAY, pero no vuelve a emitir nada. Se
+reprodujo hablando directo con la API, sin este servidor de por medio, en
+`gemini-3.1-flash-live-preview` y en `gemini-2.5-flash-native-audio-latest`,
+con todas las combinaciones de VAD y de configuración. Por texto sí funciona
+multi-turno; solo el canal de audio se atasca.
+
+Como el primer turno de cada sesión siempre funciona, se abre una sesión por
+intervención del corredor y se reinyecta el historial guardado en memoria.
+Cuesta entre medio segundo y un segundo de conexión por turno, y a cambio la
+conversación no se rompe.
+
+Flujo de cada turno:
+    el navegador manda audio solo mientras hay voz, y avisa al terminar
+    -> se abre sesión, se reinyecta el historial
+    -> se envía el audio y una cola de silencio para que el VAD cierre el turno
+    -> se recibe la respuesta, se resuelven herramientas, se cierra la sesión
+    -> se guardan las transcripciones en memoria
 """
 
 from __future__ import annotations
@@ -18,6 +32,7 @@ import os
 from google import genai
 from google.genai import types
 
+from app.memoria import Memoria
 from app.prompts import con_memoria
 from app.tools import esquemas
 
@@ -29,41 +44,35 @@ VOZ = os.getenv("GEMINI_VOICE", "Charon")
 # La API acepta PCM de 16 kHz a la entrada y emite 24 kHz a la salida.
 TASA_ENTRADA = 16_000
 TASA_SALIDA = 24_000
+TROZO = 3200                       # 100 ms de PCM a 16 kHz
 
-# Tope de sesión para que un navegador olvidado abierto no consuma cuota.
+# Cola de silencio tras la intervención: es lo que le indica al VAD del
+# servidor que el corredor terminó de hablar.
+COLA_SILENCIO_S = 1.6
+SILENCIO = b"\x00" * TROZO
+
+# Por debajo de esto no es una intervención, es un golpe de mesa.
+MIN_SEGUNDOS_TURNO = 0.3
+
+SEGUNDOS_MAX_TURNO = int(os.getenv("MAX_TURN_SECONDS", "60"))
 SEGUNDOS_MAX_SESION = int(os.getenv("MAX_SESSION_SECONDS", "600"))
-
-# El VAD del servidor detecta los turnos a partir del silencio final que envía
-# la compuerta del navegador. Ponerlo en manual está disponible pero no probado.
-VAD_MANUAL = os.getenv("VAD_MANUAL", "0") == "1"
-
-# Segundos que se le conceden al servidor para responder al ping del WebSocket.
 PING_TIMEOUT = int(os.getenv("WS_PING_TIMEOUT", "60"))
+MAX_TURNOS_HISTORIAL = int(os.getenv("MAX_HISTORY_TURNS", "20"))
 
 
 def construir_config(perfil_resumen: str | None = None) -> dict:
-    config = {
+    return {
         "response_modalities": ["AUDIO"],
         "system_instruction": con_memoria(perfil_resumen),
         "tools": [{"function_declarations": esquemas.DECLARACIONES}],
         "speech_config": {
             "voice_config": {"prebuilt_voice_config": {"voice_name": VOZ}}
         },
-        # Las transcripciones alimentan la memoria y el subtitulado en pantalla.
+        # Las transcripciones son la única memoria que queda de cada turno:
+        # sin ellas no habría historial que reinyectar en la sesión siguiente.
         "input_audio_transcription": {},
         "output_audio_transcription": {},
-        # El audio consume tokens muy rápido. Sin ventana deslizante, una
-        # conversación de varios minutos agota el contexto y la sesión muere.
-        "context_window_compression": {"sliding_window": {}},
     }
-    if VAD_MANUAL:
-        # El navegador marca los turnos él mismo. Más control, pero en pruebas
-        # el servidor dejó de responder a partir del segundo turno, así que
-        # no es el camino por defecto.
-        config["realtime_input_config"] = {
-            "automatic_activity_detection": {"disabled": True}
-        }
-    return config
 
 
 def crear_cliente() -> genai.Client:
@@ -76,158 +85,184 @@ def crear_cliente() -> genai.Client:
     cliente = genai.Client(api_key=api_key)
 
     # El SDK no expone la configuración de keepalive del WebSocket, pero sí
-    # reenvía este diccionario tal cual a websockets.connect(). Con el timeout
-    # por defecto (20 s) la sesión moría con "keepalive ping timeout" en cuanto
-    # había un hueco de silencio; 60 s da margen sin dejar de detectar una
-    # conexión realmente muerta.
-    # Atributo privado: si una actualización del SDK lo renombra, esto deja de
-    # aplicarse en silencio, así que se registra al arrancar.
+    # reenvía este diccionario tal cual a websockets.connect().
+    # Atributo privado: si el SDK lo renombra, esto deja de aplicarse, así que
+    # el fallo se registra en vez de pasar desapercibido.
     try:
         cliente._api_client._websocket_ssl_ctx["ping_timeout"] = PING_TIMEOUT
     except (AttributeError, TypeError):
         log.warning(
             "no se pudo ajustar el keepalive del WebSocket: el SDK cambió su "
-            "estructura interna. Las sesiones largas pueden cortarse."
+            "estructura interna"
         )
     return cliente
 
 
-class SesionCoach:
-    """Una conversación de voz. Vive lo que dura el WebSocket del navegador."""
+class ConversacionCoach:
+    """Una charla completa. Cada intervención del corredor abre su propia sesión."""
 
-    def __init__(self, enviar_al_navegador, perfil_resumen: str | None = None):
+    def __init__(self, enviar_al_navegador, memoria: Memoria):
         self._enviar = enviar_al_navegador
-        self._perfil = perfil_resumen
-        self.transcripcion: list[tuple[str, str]] = []  # (quien, texto)
+        self._memoria = memoria
+        self._cliente = crear_cliente()
+        self.turnos = 0
         self.bytes_entrada = 0
         self.bytes_salida = 0
-        self._ultimo_plan: dict | None = None
-
-    @property
-    def ultimo_plan(self) -> dict | None:
-        """Último plan generado, para persistirlo al cerrar la sesión."""
-        return self._ultimo_plan
 
     async def ejecutar(self, recibir_del_navegador):
-        cliente = crear_cliente()
-        config = construir_config(self._perfil)
+        resumen = self._memoria.resumen_para_prompt()
+        if resumen:
+            log.info("el corredor ya es conocido: %s", resumen[:120])
 
-        async with cliente.aio.live.connect(model=MODELO, config=config) as sesion:
+        await self._enviar({
+            "tipo": "listo",
+            "tasa_entrada": TASA_ENTRADA,
+            "tasa_salida": TASA_SALIDA,
+            "conocido": bool(resumen),
+        })
+
+        buffer = bytearray()
+        turno: asyncio.Task | None = None
+
+        async with asyncio.timeout(SEGUNDOS_MAX_SESION):
+            async for tipo, valor in recibir_del_navegador():
+                if tipo == "audio":
+                    # Con la compuerta de voz activa, que llegue audio mientras
+                    # el coach habla significa que el corredor lo interrumpió.
+                    if turno and not turno.done():
+                        turno.cancel()
+                        await self._enviar({"tipo": "interrumpido"})
+                    buffer.extend(valor)
+                    self.bytes_entrada += len(valor)
+
+                elif tipo == "fin_turno":
+                    if len(buffer) < MIN_SEGUNDOS_TURNO * TASA_ENTRADA * 2:
+                        buffer.clear()
+                        continue
+                    audio, buffer = bytes(buffer), bytearray()
+                    turno = asyncio.create_task(self._atender(audio, resumen))
+
+        if turno and not turno.done():
+            await asyncio.gather(turno, return_exceptions=True)
+
+    async def _atender(self, audio: bytes, resumen: str | None):
+        """Abre una sesión, reproduce el historial y resuelve una intervención."""
+        self.turnos += 1
+        numero = self.turnos
+        log.info("turno %d: %.1f s de audio", numero, len(audio) / (TASA_ENTRADA * 2))
+        await self._enviar({"tipo": "pensando"})
+
+        historial = self._memoria.historial(MAX_TURNOS_HISTORIAL)
+        dicho: list[str] = []
+        respondido: list[str] = []
+
+        try:
+            async with asyncio.timeout(SEGUNDOS_MAX_TURNO):
+                async with self._cliente.aio.live.connect(
+                    model=MODELO, config=construir_config(resumen)
+                ) as sesion:
+                    if historial:
+                        # Contexto sin pedir respuesta: la pregunta va en el audio.
+                        await sesion.send_client_content(
+                            turns=historial, turn_complete=False
+                        )
+
+                    emisor = asyncio.create_task(self._emitir(sesion, audio))
+                    try:
+                        await self._recibir(sesion, dicho, respondido)
+                    finally:
+                        emisor.cancel()
+                        await asyncio.gather(emisor, return_exceptions=True)
+
+        except asyncio.CancelledError:
+            log.info("turno %d interrumpido por el corredor", numero)
+            raise
+        except TimeoutError:
+            log.warning("turno %d agotó los %d s", numero, SEGUNDOS_MAX_TURNO)
             await self._enviar({
-                "tipo": "listo",
-                "tasa_entrada": TASA_ENTRADA,
-                "tasa_salida": TASA_SALIDA,
+                "tipo": "error",
+                "mensaje": "El coach tardó demasiado en responder. Inténtalo otra vez.",
             })
-            log.info("sesión Live abierta (modelo=%s, voz=%s)", MODELO, VOZ)
+        except Exception as exc:
+            log.exception("turno %d falló", numero)
+            await self._enviar({"tipo": "error", "mensaje": str(exc)})
+        finally:
+            # Se guarda lo que haya: un turno a medias sigue siendo contexto.
+            self._memoria.guardar_turno("user", "".join(dicho))
+            self._memoria.guardar_turno("model", "".join(respondido))
+            await self._enviar({"tipo": "turno_listo"})
 
-            try:
-                async with asyncio.timeout(SEGUNDOS_MAX_SESION):
-                    async with asyncio.TaskGroup() as grupo:
-                        grupo.create_task(self._bombear_audio(recibir_del_navegador, sesion))
-                        grupo.create_task(self._procesar_respuestas(sesion))
-            except TimeoutError:
-                await self._enviar({
-                    "tipo": "fin",
-                    "motivo": (
-                        f"La sesión llegó al límite de "
-                        f"{SEGUNDOS_MAX_SESION // 60} minutos."
-                    ),
-                })
-
-    async def _bombear_audio(self, recibir, sesion):
-        """Navegador -> Gemini."""
-        trozos = 0
-        async for tipo, valor in recibir():
-            if tipo == "actividad":
-                if not VAD_MANUAL:
-                    continue     # el servidor deduce los turnos por sí mismo
-                if valor:
-                    await sesion.send_realtime_input(
-                        activity_start=types.ActivityStart()
-                    )
-                else:
-                    await sesion.send_realtime_input(activity_end=types.ActivityEnd())
-                log.debug("actividad de voz: %s", "inicio" if valor else "fin")
-                continue
-
+    async def _emitir(self, sesion, audio: bytes):
+        """Envía la intervención y la cola de silencio que cierra el turno."""
+        for i in range(0, len(audio), TROZO):
+            trozo = audio[i : i + TROZO]
             await sesion.send_realtime_input(
                 audio=types.Blob(
-                    data=valor, mime_type=f"audio/pcm;rate={TASA_ENTRADA}"
+                    data=trozo.ljust(TROZO, b"\x00"),
+                    mime_type=f"audio/pcm;rate={TASA_ENTRADA}",
                 )
             )
-            self.bytes_entrada += len(valor)
-            trozos += 1
-            # Un micrófono que no captura y un silencio real son
-            # indistinguibles sin esto.
-            if trozos % 50 == 0:
-                log.info(
-                    "audio del navegador: %d trozos, %.1f KB (%.1f s aprox)",
-                    trozos, self.bytes_entrada / 1024,
-                    self.bytes_entrada / (TASA_ENTRADA * 2),
+        # Sin esta cola el VAD del servidor no da el turno por terminado.
+        for _ in range(int(COLA_SILENCIO_S * 10)):
+            await sesion.send_realtime_input(
+                audio=types.Blob(
+                    data=SILENCIO, mime_type=f"audio/pcm;rate={TASA_ENTRADA}"
                 )
-        log.info("el navegador dejó de enviar audio tras %d trozos", trozos)
+            )
+            await asyncio.sleep(0.1)
 
-    async def _procesar_respuestas(self, sesion):
-        """Gemini -> navegador, resolviendo herramientas por el camino."""
+    async def _recibir(self, sesion, dicho: list[str], respondido: list[str]):
         async for respuesta in sesion.receive():
-            if log.isEnabledFor(logging.DEBUG):
-                sc = respuesta.server_content
-                marcas = [
-                    n for n in ("turn_complete", "interrupted", "generation_complete")
-                    if sc is not None and getattr(sc, n, None)
-                ]
-                if marcas or respuesta.tool_call or respuesta.go_away:
-                    log.debug("evento: %s%s%s", ",".join(marcas) or "-",
-                              " +tool_call" if respuesta.tool_call else "",
-                              f" +go_away({respuesta.go_away})" if respuesta.go_away else "")
             if respuesta.data:
-                await self._enviar(respuesta.data)  # audio crudo
+                await self._enviar(respuesta.data)
                 self.bytes_salida += len(respuesta.data)
 
             contenido = respuesta.server_content
             if contenido:
-                await self._manejar_transcripciones(contenido)
-                if contenido.interrupted:
-                    # El usuario habló encima: el navegador debe callar ya.
-                    await self._enviar({"tipo": "interrumpido"})
+                await self._transcripciones(contenido, dicho, respondido)
+                if contenido.turn_complete:
+                    return
 
             if respuesta.tool_call:
-                await self._responder_herramientas(sesion, respuesta.tool_call)
+                await self._herramientas(sesion, respuesta.tool_call)
 
-    async def _manejar_transcripciones(self, contenido):
+    async def _transcripciones(self, contenido, dicho, respondido):
         entrada = getattr(contenido, "input_transcription", None)
         if entrada and entrada.text:
-            self.transcripcion.append(("corredor", entrada.text))
+            dicho.append(entrada.text)
             await self._enviar({"tipo": "transcripcion", "quien": "corredor",
                                 "texto": entrada.text})
 
         salida = getattr(contenido, "output_transcription", None)
         if salida and salida.text:
-            self.transcripcion.append(("coach", salida.text))
+            respondido.append(salida.text)
             await self._enviar({"tipo": "transcripcion", "quien": "coach",
                                 "texto": salida.text})
 
-    async def _responder_herramientas(self, sesion, tool_call):
+    async def _herramientas(self, sesion, tool_call):
         respuestas = []
         for llamada in tool_call.function_calls:
             argumentos = dict(llamada.args or {})
             log.info("herramienta %s(%s)", llamada.name, argumentos)
 
-            # El cálculo es síncrono y rápido, pero va a un hilo para no
-            # bloquear el bombeo de audio si algún plan crece.
             resultado = await asyncio.to_thread(
                 esquemas.ejecutar, llamada.name, argumentos
             )
 
             if llamada.name == "generar_plan" and "error" not in resultado:
-                self._ultimo_plan = resultado
-                # El plan completo va a la pantalla; al modelo le basta el resumen.
+                self._memoria.guardar_plan(resultado)
                 await self._enviar({"tipo": "plan", "plan": resultado})
+                # El plan completo ya está en pantalla; al modelo le basta el
+                # resumen, que además no puede recitar 18 semanas en voz alta.
                 resultado = {
                     "resumen_hablado": resultado["resumen_hablado"],
                     "viabilidad": resultado["viabilidad"],
                     "nota": "El plan completo ya se muestra en pantalla al corredor.",
                 }
+            elif llamada.name == "evaluar_sintoma" and "error" not in resultado:
+                self._memoria.actualizar_perfil(
+                    molestia_reciente=argumentos.get("zona")
+                )
 
             await self._enviar({
                 "tipo": "herramienta",
