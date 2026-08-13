@@ -194,3 +194,86 @@ def test_borrar_del_perfil_elimina_de_verdad(memoria):
 
 def test_borrar_una_clave_inexistente_no_falla(memoria):
     memoria.borrar_del_perfil("no_existe")
+
+
+# --------------------------------------------------------------------------
+# Historial: listar charlas y planes
+# --------------------------------------------------------------------------
+
+def test_las_conversaciones_se_listan_de_la_mas_reciente_a_la_mas_vieja(bd):
+    from app.memoria import conversaciones
+    a = Memoria("josue", "vieja", ruta=bd)
+    a.guardar_turno("user", "Quiero un 10k")
+    b = Memoria("josue", "nueva", ruta=bd)
+    b.guardar_turno("user", "Ahora una media")
+
+    lista = conversaciones("josue", ruta=bd)
+    assert [c["id"] for c in lista] == ["nueva", "vieja"]
+
+
+def test_el_titulo_de_la_charla_es_lo_primero_que_dijo_el_corredor(bd):
+    from app.memoria import conversaciones
+    m = Memoria("josue", "c", ruta=bd)
+    m.guardar_turno("user", "Quiero correr un maratón")
+    m.guardar_turno("model", "Perfecto")
+    m.guardar_turno("user", "En dieciocho semanas")
+
+    assert conversaciones("josue", ruta=bd)[0]["titulo"] == "Quiero correr un maratón"
+
+
+def test_la_charla_dice_cuántos_planes_salieron_de_ella(bd):
+    from app.memoria import conversaciones
+    m = Memoria("josue", "c", ruta=bd)
+    m.guardar_turno("user", "hola")
+    m.guardar_plan({"distancia": "10k", "semanas": 12})
+
+    assert conversaciones("josue", ruta=bd)[0]["planes"] == 1
+
+
+def test_no_se_ven_las_conversaciones_de_otro_corredor(bd):
+    from app.memoria import conversaciones
+    Memoria("ana", "suya", ruta=bd).guardar_turno("user", "privado")
+    assert conversaciones("beto", ruta=bd) == []
+
+
+def test_se_listan_los_planes_con_su_resumen(bd):
+    from app.memoria import planes_de
+    m = Memoria("josue", "c", ruta=bd)
+    m.guardar_plan({"distancia": "5k", "semanas": 8, "dias_por_semana": 3})
+    m.guardar_plan({"distancia": "42k", "semanas": 18, "dias_por_semana": 5})
+
+    lista = planes_de("josue", ruta=bd)
+    assert [p["distancia"] for p in lista] == ["42k", "5k"]
+    assert lista[0]["semanas"] == 18
+
+
+def test_un_plan_no_se_lee_desde_otra_cuenta(bd):
+    from app.memoria import plan_por_id
+    Memoria("josue", "c", ruta=bd).guardar_plan({"distancia": "10k", "semanas": 12})
+    assert plan_por_id(1, "josue", ruta=bd)["distancia"] == "10k"
+    assert plan_por_id(1, "intruso", ruta=bd) is None
+
+
+def test_la_transcripcion_devuelve_la_charla_en_orden(bd):
+    from app.memoria import transcripcion
+    m = Memoria("josue", "c", ruta=bd)
+    m.guardar_turno("user", "primero")
+    m.guardar_turno("model", "segundo")
+
+    turnos = transcripcion("c", "josue", ruta=bd)
+    assert [t["quien"] for t in turnos] == ["corredor", "coach"]
+    assert turnos[0]["texto"] == "primero"
+
+
+def test_la_transcripcion_ajena_sale_vacia(bd):
+    from app.memoria import transcripcion
+    Memoria("ana", "suya", ruta=bd).guardar_turno("user", "privado")
+    assert transcripcion("suya", "beto", ruta=bd) == []
+
+
+def test_retomar_una_conversacion_recupera_su_historial(bd):
+    """Es lo que permite seguir una charla días después."""
+    Memoria("josue", "charla-x", ruta=bd).guardar_turno("user", "Quiero un 21k")
+    retomada = Memoria("josue", "charla-x", ruta=bd)
+    assert len(retomada.historial()) == 1
+    assert retomada.historial()[0]["parts"][0]["text"] == "Quiero un 21k"

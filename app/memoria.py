@@ -47,10 +47,23 @@ CREATE INDEX IF NOT EXISTS idx_turnos_corredor ON turnos(corredor_id, id);
 CREATE TABLE IF NOT EXISTS planes (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     corredor_id  TEXT NOT NULL REFERENCES corredores(id),
+    conversacion TEXT,                         -- de qué charla salió
     plan         TEXT NOT NULL,                -- JSON del plan generado
     creado       TEXT NOT NULL
 );
 """
+
+# Bases creadas antes de que los planes se ligaran a su conversación.
+MIGRACIONES = [
+    ("planes", "conversacion", "ALTER TABLE planes ADD COLUMN conversacion TEXT"),
+]
+
+
+def _migrar(con) -> None:
+    for tabla, columna, sentencia in MIGRACIONES:
+        columnas = {f["name"] for f in con.execute(f"PRAGMA table_info({tabla})")}
+        if columnas and columna not in columnas:
+            con.execute(sentencia)
 
 
 def _ahora() -> str:
@@ -63,6 +76,7 @@ def conectar(ruta: Path | str | None = None):
     con.row_factory = sqlite3.Row
     try:
         con.executescript(ESQUEMA)
+        _migrar(con)
         yield con
         con.commit()
     finally:
@@ -89,6 +103,83 @@ def corredor_por_codigo(codigo: str, ruta: Path | str | None = None) -> str | No
             (codigo,),
         ).fetchone()
     return fila["id"] if fila else None
+
+
+def conversaciones(corredor_id: str, ruta: Path | str | None = None) -> list[dict]:
+    """Las charlas de un corredor, de la más reciente a la más antigua.
+
+    El título es lo primero que dijo el corredor en esa charla: describe de qué
+    iba mucho mejor que una fecha.
+    """
+    with conectar(ruta or RUTA_BD) as con:
+        filas = con.execute(
+            """
+            SELECT t.conversacion            AS id,
+                   MIN(t.creado)             AS inicio,
+                   MAX(t.creado)             AS fin,
+                   COUNT(*)                  AS turnos,
+                   (SELECT texto FROM turnos
+                     WHERE conversacion = t.conversacion AND rol = 'user'
+                     ORDER BY id LIMIT 1)    AS titulo,
+                   (SELECT COUNT(*) FROM planes
+                     WHERE conversacion = t.conversacion) AS planes
+              FROM turnos t
+             WHERE t.corredor_id = ?
+          GROUP BY t.conversacion
+          ORDER BY MAX(t.id) DESC
+            """,
+            (corredor_id,),
+        ).fetchall()
+    return [dict(f) for f in filas]
+
+
+def planes_de(corredor_id: str, ruta: Path | str | None = None) -> list[dict]:
+    """Resumen de cada plan guardado, sin arrastrar el JSON entero."""
+    with conectar(ruta or RUTA_BD) as con:
+        filas = con.execute(
+            "SELECT id, conversacion, creado, plan FROM planes "
+            "WHERE corredor_id = ? ORDER BY id DESC",
+            (corredor_id,),
+        ).fetchall()
+    resumen = []
+    for f in filas:
+        datos = json.loads(f["plan"])
+        resumen.append({
+            "id": f["id"],
+            "conversacion": f["conversacion"],
+            "creado": f["creado"],
+            "distancia": datos.get("distancia"),
+            "semanas": datos.get("semanas"),
+            "dias_por_semana": datos.get("dias_por_semana"),
+            "vdot": datos.get("vdot"),
+        })
+    return resumen
+
+
+def transcripcion(conversacion: str, corredor_id: str,
+                 ruta: Path | str | None = None) -> list[dict]:
+    """Los turnos de una charla, para volver a pintarla en pantalla."""
+    with conectar(ruta or RUTA_BD) as con:
+        filas = con.execute(
+            "SELECT rol, texto, creado FROM turnos "
+            "WHERE conversacion = ? AND corredor_id = ? ORDER BY id",
+            (conversacion, corredor_id),
+        ).fetchall()
+    return [
+        {"quien": "corredor" if f["rol"] == "user" else "coach",
+         "texto": f["texto"], "creado": f["creado"]}
+        for f in filas
+    ]
+
+
+def plan_por_id(plan_id: int, corredor_id: str, ruta: Path | str | None = None) -> dict | None:
+    """Un plan concreto. Pide el corredor para que nadie lea planes ajenos."""
+    with conectar(ruta or RUTA_BD) as con:
+        fila = con.execute(
+            "SELECT plan FROM planes WHERE id = ? AND corredor_id = ?",
+            (plan_id, corredor_id),
+        ).fetchone()
+    return json.loads(fila["plan"]) if fila else None
 
 
 class Memoria:
@@ -177,8 +268,10 @@ class Memoria:
     def guardar_plan(self, plan: dict) -> None:
         with conectar(self.ruta) as con:
             con.execute(
-                "INSERT INTO planes (corredor_id, plan, creado) VALUES (?, ?, ?)",
-                (self.corredor_id, json.dumps(plan, ensure_ascii=False), _ahora()),
+                "INSERT INTO planes (corredor_id, conversacion, plan, creado) "
+                "VALUES (?, ?, ?, ?)",
+                (self.corredor_id, self.conversacion,
+                 json.dumps(plan, ensure_ascii=False), _ahora()),
             )
         v = plan.get("viabilidad", {})
         self.actualizar_perfil(

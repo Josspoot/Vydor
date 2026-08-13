@@ -16,13 +16,15 @@ from pathlib import Path
 from uuid import uuid4
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import telegram
 from app.live_agent import ConversacionCoach
-from app.memoria import Memoria
+from app.memoria import (
+    Memoria, conversaciones, plan_por_id, planes_de, transcripcion,
+)
 
 # Ruta explícita: load_dotenv() busca desde el directorio actual, así que el
 # servidor fallaba según desde dónde se arrancara.
@@ -102,6 +104,29 @@ async def enlace_telegram(corredor: str):
         return {"disponible": False}
     codigo = telegram.generar_codigo(corredor.strip()[:64])
     return {"disponible": True, "url": f"https://t.me/{usuario}?start={codigo}"}
+
+
+@app.get("/api/conversaciones")
+async def api_conversaciones(corredor: str):
+    return {"conversaciones": conversaciones(corredor.strip()[:64])}
+
+
+@app.get("/api/conversaciones/{conversacion}")
+async def api_transcripcion(conversacion: str, corredor: str):
+    return {"turnos": transcripcion(conversacion, corredor.strip()[:64])}
+
+
+@app.get("/api/planes")
+async def api_planes(corredor: str):
+    return {"planes": planes_de(corredor.strip()[:64])}
+
+
+@app.get("/api/planes/{plan_id}")
+async def api_plan(plan_id: int, corredor: str):
+    plan = plan_por_id(plan_id, corredor.strip()[:64])
+    if plan is None:
+        raise HTTPException(404, "ese plan no existe o no es tuyo")
+    return {"plan": plan}
 
 
 @app.get("/")
@@ -211,7 +236,11 @@ async def websocket_coach(ws: WebSocket):
     # localStorage. Suficiente para el demo: sin cuentas ni contraseñas, pero
     # la memoria entre conversaciones funciona en el mismo dispositivo.
     corredor = (ws.query_params.get("corredor") or "").strip()[:64] or f"anon-{ip}"
-    memoria = Memoria(corredor, conversacion=uuid4().hex)
+    # Si el navegador manda una conversación, se retoma esa: su historial
+    # vuelve a entrar en cada sesión y el coach sigue donde lo dejaron.
+    charla = (ws.query_params.get("conversacion") or "").strip()[:64] or uuid4().hex
+    memoria = Memoria(corredor, conversacion=charla)
+    await ws.send_json({"tipo": "conversacion", "id": charla})
 
     sesion = ConversacionCoach(enviar, memoria)
     lector = asyncio.create_task(leer_del_navegador())

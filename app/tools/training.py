@@ -175,21 +175,29 @@ FRACCION_FONDO_POR_DIAS = {3: 0.45, 4: 0.38, 5: 0.34, 6: 0.32, 7: 0.30}
 KM_MAX_PROMEDIO_POR_DIA = 14
 
 # Volumen semanal pico recomendado y mínimo viable, en km
+# semanas_max no es una regla de seguridad sino de sentido: un bloque de
+# preparación tiene una duración útil, y estirarlo no mejora nada. El tiempo
+# sobrante se emplea en construir base, no en alargar el plan.
 PERFIL_DISTANCIA = {
-    "5k":  {"km_min": 20, "km_pico": 45, "fondo_max": 12, "semanas_taper": 1, "semanas_min": 6},
-    "10k": {"km_min": 25, "km_pico": 55, "fondo_max": 16, "semanas_taper": 1, "semanas_min": 8},
-    "21k": {"km_min": 30, "km_pico": 70, "fondo_max": 22, "semanas_taper": 2, "semanas_min": 10},
-    "42k": {"km_min": 40, "km_pico": 90, "fondo_max": 32, "semanas_taper": 3, "semanas_min": 16},
+    "5k":  {"km_min": 20, "km_pico": 45, "fondo_max": 12, "semanas_taper": 1,
+            "semanas_min": 6,  "semanas_max": 16},
+    "10k": {"km_min": 25, "km_pico": 55, "fondo_max": 16, "semanas_taper": 1,
+            "semanas_min": 8,  "semanas_max": 20},
+    "21k": {"km_min": 30, "km_pico": 70, "fondo_max": 22, "semanas_taper": 2,
+            "semanas_min": 10, "semanas_max": 24},
+    "42k": {"km_min": 40, "km_pico": 90, "fondo_max": 32, "semanas_taper": 3,
+            "semanas_min": 16, "semanas_max": 30},
 }
 
 
 @dataclass
 class Viabilidad:
-    veredicto: Literal["viable", "ajustado", "no_recomendado"]
+    veredicto: Literal["viable", "ajustado", "no_recomendado", "demasiado_largo"]
     razon: str
     km_pico_alcanzable: float
     km_pico_recomendado: float
     semanas_minimas_sugeridas: int
+    semanas_recomendadas: int = 0    # las que el plan usará de verdad
 
 
 def evaluar_viabilidad(
@@ -224,6 +232,22 @@ def evaluar_viabilidad(
     pico_por_dias = dias_por_semana * KM_MAX_PROMEDIO_POR_DIA
     pico_alcanzable = min(pico_por_forma, perfil["km_pico"], pico_por_dias)
 
+    if semanas > perfil["semanas_max"]:
+        return Viabilidad(
+            veredicto="demasiado_largo",
+            razon=(
+                f"{semanas} semanas es mucho más de lo que aporta un bloque de "
+                f"{distancia}: a partir de {perfil['semanas_max']} semanas se "
+                f"acumula cansancio sin ganar forma. Te preparo un bloque de "
+                f"{perfil['semanas_max']} semanas y hasta entonces lo suyo es "
+                f"construir base con rodajes suaves."
+            ),
+            km_pico_alcanzable=round(min(pico_alcanzable, perfil["km_pico"]), 1),
+            km_pico_recomendado=perfil["km_pico"],
+            semanas_minimas_sugeridas=perfil["semanas_min"],
+            semanas_recomendadas=perfil["semanas_max"],
+        )
+
     if semanas < perfil["semanas_min"]:
         return Viabilidad(
             veredicto="no_recomendado",
@@ -234,6 +258,7 @@ def evaluar_viabilidad(
             km_pico_alcanzable=round(pico_alcanzable, 1),
             km_pico_recomendado=perfil["km_pico"],
             semanas_minimas_sugeridas=perfil["semanas_min"],
+            semanas_recomendadas=semanas,
         )
 
     if pico_alcanzable < perfil["km_min"]:
@@ -249,6 +274,7 @@ def evaluar_viabilidad(
             semanas_minimas_sugeridas=_semanas_para_llegar(
                 km_semanales_actuales, perfil["km_min"], perfil["semanas_taper"]
             ),
+            semanas_recomendadas=semanas,
         )
 
     if pico_por_forma < perfil["km_pico"] * 0.8:
@@ -263,6 +289,7 @@ def evaluar_viabilidad(
             km_pico_alcanzable=round(pico_alcanzable, 1),
             km_pico_recomendado=perfil["km_pico"],
             semanas_minimas_sugeridas=perfil["semanas_min"],
+            semanas_recomendadas=semanas,
         )
 
     # El calendario solo se vuelve un problema real cuando recorta bastante
@@ -280,6 +307,7 @@ def evaluar_viabilidad(
             km_pico_alcanzable=round(pico_alcanzable, 1),
             km_pico_recomendado=perfil["km_pico"],
             semanas_minimas_sugeridas=perfil["semanas_min"],
+            semanas_recomendadas=semanas,
         )
 
     return Viabilidad(
@@ -291,6 +319,7 @@ def evaluar_viabilidad(
         km_pico_alcanzable=round(pico_alcanzable, 1),
         km_pico_recomendado=perfil["km_pico"],
         semanas_minimas_sugeridas=perfil["semanas_min"],
+        semanas_recomendadas=semanas,
     )
 
 
@@ -367,6 +396,9 @@ def generar_plan(
     viabilidad = evaluar_viabilidad(
         distancia, semanas, km_semanales_actuales, dias_por_semana
     )
+    # Un bloque más largo de la cuenta no se genera: se recorta a lo útil y la
+    # viabilidad ya explica por qué.
+    semanas = min(semanas, perfil["semanas_max"])
 
     vdot = None
     ritmos: dict[str, RangoRitmo] = {}

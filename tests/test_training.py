@@ -313,3 +313,37 @@ def test_plan_es_serializable(plan_maraton):
     import json
     crudo = json.dumps(plan_maraton.a_dict())
     assert json.loads(crudo)["distancia"] == "42k"
+
+
+# --------------------------------------------------------------------------
+# Duración máxima útil de un bloque
+# --------------------------------------------------------------------------
+
+def test_un_5k_a_43_semanas_es_demasiado_largo():
+    """Nadie entrena 43 semanas para un 5K; el plan se recorta a lo útil."""
+    v = t.evaluar_viabilidad("5k", semanas=43, km_semanales_actuales=15)
+    assert v.veredicto == "demasiado_largo"
+    assert v.semanas_recomendadas == t.PERFIL_DISTANCIA["5k"]["semanas_max"]
+    assert "base" in v.razon
+
+
+@pytest.mark.parametrize("distancia", ["5k", "10k", "21k", "42k"])
+def test_el_plan_nunca_pasa_del_maximo_de_su_distancia(distancia):
+    tope = t.PERFIL_DISTANCIA[distancia]["semanas_max"]
+    plan = t.generar_plan(distancia, semanas=tope + 20, km_semanales_actuales=30)
+    assert len(plan.semanas_plan) == tope
+    assert plan.viabilidad.veredicto == "demasiado_largo"
+
+
+@pytest.mark.parametrize("distancia", ["5k", "10k", "21k", "42k"])
+def test_dentro_del_rango_se_respetan_las_semanas_pedidas(distancia):
+    perfil = t.PERFIL_DISTANCIA[distancia]
+    semanas = perfil["semanas_min"] + 2
+    plan = t.generar_plan(distancia, semanas=semanas, km_semanales_actuales=30)
+    assert len(plan.semanas_plan) == semanas
+    assert plan.viabilidad.semanas_recomendadas == semanas
+
+
+def test_el_maximo_siempre_deja_sitio_por_encima_del_minimo():
+    for distancia, perfil in t.PERFIL_DISTANCIA.items():
+        assert perfil["semanas_max"] > perfil["semanas_min"], distancia
