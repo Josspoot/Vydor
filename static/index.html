@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Nico · Coach de running</title>
+<title>Vydor · Coach de running</title>
 <style>
   :root {
     --fondo: #0f1115;
@@ -72,20 +72,20 @@
 </head>
 <body>
 <header>
-  <h1>Nico · entrenador de running</h1>
-  <button id="boton">Hablar con Nico</button>
+  <h1>Vydor · entrenador de running</h1>
+  <button id="boton">Hablar con Vydor</button>
   <span class="estado"><span class="punto" id="punto"></span><span id="estado">desconectado</span></span>
 </header>
 
 <main>
   <section class="panel">
     <h2>Conversación</h2>
-    <div id="conversacion"><p class="vacio">Pulsa «Hablar con Nico» y cuéntale qué carrera tienes en mente.</p></div>
+    <div id="conversacion"><p class="vacio">Pulsa «Hablar con Vydor» y cuéntale qué carrera tienes en mente.</p></div>
   </section>
 
   <section class="panel">
     <h2>Plan de entrenamiento</h2>
-    <div id="plan"><p class="vacio">Aquí aparecerá tu plan cuando Nico lo genere.</p></div>
+    <div id="plan"><p class="vacio">Aquí aparecerá tu plan cuando Vydor lo genere.</p></div>
     <p class="aviso">
       Orientación de entrenamiento, no consejo médico. Ante dolor persistente,
       consulta a un profesional de la salud.
@@ -152,7 +152,7 @@ function detener() {
   micro?.mediaStream?.getTracks().forEach((t) => t.stop());
   ctxEntrada?.close();
   ctxSalida?.close();
-  boton.textContent = "Hablar con Nico";
+  boton.textContent = "Hablar con Vydor";
   boton.classList.remove("detener");
   marcar("desconectado");
 }

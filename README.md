@@ -5,8 +5,6 @@ Chatbot de voz que actúa como entrenador personal para corredores de 5k, 10k,
 (speech-to-speech nativo), con la lógica de entrenamiento resuelta por un motor
 determinista.
 
-El entrenador se presenta como **Nico** en la conversación.
-
 ## La decisión de diseño que importa
 
 **El LLM no calcula nada.** Un modelo improvisando planes de entrenamiento
@@ -60,7 +58,7 @@ cp .env.example .env        # y pon tu GEMINI_API_KEY
 .venv/bin/python -m uvicorn app.main:app --reload
 ```
 
-Abre http://localhost:8000 y pulsa «Hablar con Nico».
+Abre http://localhost:8000 y pulsa «Hablar con Vydor».
 
 La clave se saca gratis en [AI Studio](https://aistudio.google.com/apikey) y
 **no pide tarjeta de crédito**.
