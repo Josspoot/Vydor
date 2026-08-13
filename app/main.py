@@ -63,11 +63,11 @@ def _programar_recordatorios() -> None:
     )
     planificador.add_job(
         telegram.enviar_recordatorios, "cron",
-        hour=telegram.HORA_RECORDATORIO, minute=0, id="recordatorio_diario",
+        hour=telegram.hora_recordatorio(), minute=0, id="recordatorio_diario",
     )
     planificador.start()
     log.info("recordatorios diarios programados a las %02d:00",
-             telegram.HORA_RECORDATORIO)
+             telegram.hora_recordatorio())
 
 
 @asynccontextmanager

@@ -24,9 +24,19 @@ from app.recordatorios import recordatorio_para
 
 log = logging.getLogger(__name__)
 
-TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
-BASE = f"https://api.telegram.org/bot{TOKEN}"
-HORA_RECORDATORIO = int(os.getenv("TELEGRAM_HORA", "7"))
+# Se leen en cada uso y no al importar: main.py importa este módulo antes de
+# llamar a load_dotenv(), así que un token leído aquí arriba saldría siempre
+# vacío por muy bien configurado que estuviera el .env.
+def _token() -> str:
+    return os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+
+
+def _url(metodo: str) -> str:
+    return f"https://api.telegram.org/bot{_token()}/{metodo}"
+
+
+def hora_recordatorio() -> int:
+    return int(os.getenv("TELEGRAM_HORA", "7"))
 
 BIENVENIDA = (
     "¡Listo! Soy Vydor, tu entrenador.\n\n"
@@ -38,7 +48,7 @@ BIENVENIDA = (
 
 
 def configurado() -> bool:
-    return bool(TOKEN)
+    return bool(_token())
 
 
 # --------------------------------------------------------------------------
@@ -52,7 +62,7 @@ async def enviar(chat_id: int | str, texto: str) -> bool:
         return False
     try:
         async with httpx.AsyncClient(timeout=20) as cliente:
-            r = await cliente.post(f"{BASE}/sendMessage", json={
+            r = await cliente.post(_url("sendMessage"), json={
                 "chat_id": chat_id,
                 "text": texto,
                 "parse_mode": "Markdown",
@@ -72,7 +82,7 @@ async def nombre_del_bot() -> str | None:
         return None
     try:
         async with httpx.AsyncClient(timeout=15) as cliente:
-            r = await cliente.get(f"{BASE}/getMe")
+            r = await cliente.get(_url("getMe"))
         return r.json()["result"]["username"] if r.status_code == 200 else None
     except (httpx.HTTPError, KeyError, ValueError):
         return None
@@ -108,7 +118,7 @@ async def escuchar(ruta=None) -> None:
     while True:
         try:
             async with httpx.AsyncClient(timeout=40) as cliente:
-                r = await cliente.get(f"{BASE}/getUpdates", params={
+                r = await cliente.get(_url("getUpdates"), params={
                     "timeout": 30,
                     **({"offset": desplazamiento} if desplazamiento else {}),
                 })

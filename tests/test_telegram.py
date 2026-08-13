@@ -119,3 +119,22 @@ async def test_se_envia_el_entrenamiento_de_hoy(bd, enviados):
 async def test_sin_nadie_vinculado_no_se_envia_nada(bd, enviados):
     assert await telegram.enviar_recordatorios(ruta=bd) == 0
     assert enviados == []
+
+
+def test_el_token_se_lee_al_usarlo_y_no_al_importar(monkeypatch):
+    """main.py importa este módulo ANTES de cargar el .env.
+
+    Si el token se leyera en el import, quedaría vacío para siempre y el bot
+    no arrancaría por muy bien configurado que estuviera el entorno.
+    """
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+    assert telegram.configurado() is False
+
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123:abc")
+    assert telegram.configurado() is True, "el token debe leerse en cada uso"
+    assert "123:abc" in telegram._url("getMe")
+
+
+def test_la_hora_tambien_se_lee_al_usarla(monkeypatch):
+    monkeypatch.setenv("TELEGRAM_HORA", "9")
+    assert telegram.hora_recordatorio() == 9
