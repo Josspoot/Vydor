@@ -39,16 +39,37 @@ emergencia por encima de cualquier otra señal.
 ## Arquitectura
 
 ```
-navegador  --PCM 16 kHz-->  FastAPI  --WebSocket-->  Gemini Live API
-    ^                          |                          |
-    |                          |  function calling        |
-    +---PCM 24 kHz-------------+--------------------------+
-                               |
-                     motor determinista
-              (VDOT · progresión · triaje de síntomas)
+navegador  --PCM 16 kHz-->  FastAPI  --una sesión por turno-->  Gemini Live API
+    ^         (solo mientras     |                                    |
+    |          hay voz)          |  function calling                  |
+    +---PCM 24 kHz---------------+------------------------------------+
+                                 |
+                   motor determinista  +  memoria (SQLite)
+            (VDOT · progresión · triaje)   (historial · perfil)
 ```
 
 La API key vive solo en el servidor; el navegador nunca la ve.
+
+### Una sesión por turno, y por qué
+
+Lo natural sería mantener una sola sesión Live abierta durante toda la
+conversación. No funciona: **la sesión responde una vez y después queda
+inerte**. Sigue aceptando audio, no cierra la conexión ni envía `GO_AWAY`,
+pero no vuelve a emitir nada.
+
+Se reprodujo hablando directo con la API, sin este servidor de por medio, en
+`gemini-3.1-flash-live-preview` y en `gemini-2.5-flash-native-audio-latest`,
+con VAD automático y manual, con y sin compuerta de voz, con silencio digital
+y con ruido de confort. Por texto la misma configuración responde a cinco
+turnos seguidos; solo el canal de audio se atasca.
+
+Como el **primer turno de cada sesión siempre funciona**, se abre una sesión
+por intervención del corredor y se reinyecta el historial. Cuesta entre medio
+segundo y un segundo de conexión por turno, y a cambio la conversación no se
+rompe.
+
+El efecto secundario es afortunado: la persistencia deja de ser un parche y
+pasa a ser la memoria que el reto pide como punto extra.
 
 ## Puesta en marcha
 
@@ -71,11 +92,17 @@ La clave se saca gratis en [AI Studio](https://aistudio.google.com/apikey) y
 ## Tests
 
 ```bash
-.venv/bin/python -m pytest -q     # 92 tests
+.venv/bin/python -m pytest -q     # 124 tests
 ```
 
 Cubren la matemática de VDOT contra tablas, las reglas de carga sobre planes
-generados (progresión, descargas, taper, 80/20) y el triaje de síntomas.
+generados (progresión, descargas, taper, 80/20), el triaje de síntomas y la
+memoria.
+
+Un caso merece mención: el triaje **se niega a dictaminar** si no sabe si el
+dolor aparece en reposo, si hace cojear y si mejora al calentar. Salió de una
+prueba real en la que el modelo llamó a la herramienta con solo la zona del
+dolor y los valores por defecto lo despacharon como molestia normal.
 
 ## Costo
 
@@ -92,7 +119,7 @@ compartido no drene la cuota.
 - [x] Triaje de síntomas y banderas rojas
 - [x] Puente de voz bidireccional con function calling
 - [x] Cliente web (captura 16 kHz, reproducción 24 kHz, barge-in)
-- [ ] Memoria entre conversaciones (perfil + resumen rodante)
+- [x] Memoria: historial de la conversación y perfil entre conversaciones
 - [ ] Recordatorios proactivos por Telegram
 
 ### Sobre WhatsApp
