@@ -105,6 +105,19 @@ let activo = false;
 let siguienteInicio = 0;
 let fuentes = [];
 let ultimoQuien = null;
+let bytesEnviados = 0;
+let medidor = null;
+
+// Sin esto no hay forma de saber si el micrófono está produciendo algo:
+// un fallo de captura y un silencio real se ven exactamente igual.
+function arrancarMedidor() {
+  let previo = 0;
+  medidor = setInterval(() => {
+    const kbps = ((bytesEnviados - previo) / 1024).toFixed(1);
+    previo = bytesEnviados;
+    if (activo) marcar(`escuchando · ${kbps} KB/s al servidor`, "activo");
+  }, 1000);
+}
 
 function marcar(texto, clase = "") {
   estado.textContent = texto;
@@ -126,28 +139,47 @@ async function iniciar() {
 
   await new Promise((r) => (ws.onopen = r));
 
-  // El micrófono se captura ya a 16 kHz: así el worklet no tiene que remuestrear.
-  ctxEntrada = new AudioContext({ sampleRate: 16000 });
+  // Tasa nativa del sistema: el worklet remuestrea a 16 kHz. Forzar el
+  // contexto a 16 kHz falla en algunos navegadores según el hardware.
+  ctxEntrada = new AudioContext();
   await ctxEntrada.audioWorklet.addModule("/static/captura-audio.js");
   micro = ctxEntrada.createMediaStreamSource(stream);
   worklet = new AudioWorkletNode(ctxEntrada, "captura-pcm");
+
   worklet.port.onmessage = (ev) => {
-    if (ws.readyState === WebSocket.OPEN) ws.send(ev.data);
+    if (ev.data.tipo === "inicio") {
+      console.log(`captura iniciada a ${ev.data.tasaEntrada} Hz -> 16000 Hz`);
+      return;
+    }
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(ev.data);
+      bytesEnviados += ev.data.byteLength;
+    }
   };
+
   micro.connect(worklet);
+  // El grafo de Web Audio se evalúa desde el destino hacia atrás: un nodo sin
+  // salida conectada puede no ejecutar process() nunca. Este nodo mudo mantiene
+  // el worklet vivo sin que se oiga el propio micrófono.
+  const mudo = ctxEntrada.createGain();
+  mudo.gain.value = 0;
+  worklet.connect(mudo).connect(ctxEntrada.destination);
 
   ctxSalida = new AudioContext({ sampleRate: 24000 });
   siguienteInicio = 0;
 
   activo = true;
+  bytesEnviados = 0;
   boton.textContent = "Terminar";
   boton.classList.add("detener");
   marcar("escuchando", "activo");
+  arrancarMedidor();
 }
 
 function detener() {
   if (!activo) return;
   activo = false;
+  clearInterval(medidor);
   ws?.readyState === WebSocket.OPEN && ws.close();
   micro?.mediaStream?.getTracks().forEach((t) => t.stop());
   ctxEntrada?.close();

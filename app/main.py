@@ -137,4 +137,15 @@ async def websocket_coach(ws: WebSocket):
             await lector
         with suppress(Exception):
             await ws.close()
-        log.info("sesión cerrada (%d turnos transcritos)", len(sesion.transcripcion))
+        log.info(
+            "sesión cerrada | %d turnos transcritos | %.1f KB del navegador | "
+            "%.1f KB de audio devuelto",
+            len(sesion.transcripcion),
+            sesion.bytes_entrada / 1024,
+            sesion.bytes_salida / 1024,
+        )
+        if sesion.bytes_entrada == 0:
+            log.warning(
+                "el navegador no envió NADA de audio: revisa permisos del "
+                "micrófono y la consola del navegador"
+            )

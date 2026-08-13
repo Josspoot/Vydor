@@ -65,6 +65,8 @@ class SesionCoach:
         self._enviar = enviar_al_navegador
         self._perfil = perfil_resumen
         self.transcripcion: list[tuple[str, str]] = []  # (quien, texto)
+        self.bytes_entrada = 0
+        self.bytes_salida = 0
         self._ultimo_plan: dict | None = None
 
     @property
@@ -100,18 +102,31 @@ class SesionCoach:
 
     async def _bombear_audio(self, recibir, sesion):
         """Navegador -> Gemini."""
+        trozos = 0
         async for trozo in recibir():
             await sesion.send_realtime_input(
                 audio=types.Blob(
                     data=trozo, mime_type=f"audio/pcm;rate={TASA_ENTRADA}"
                 )
             )
+            self.bytes_entrada += len(trozo)
+            trozos += 1
+            # Un micrófono que no captura y un silencio real son
+            # indistinguibles sin esto.
+            if trozos % 50 == 0:
+                log.info(
+                    "audio del navegador: %d trozos, %.1f KB (%.1f s aprox)",
+                    trozos, self.bytes_entrada / 1024,
+                    self.bytes_entrada / (TASA_ENTRADA * 2),
+                )
+        log.info("el navegador dejó de enviar audio tras %d trozos", trozos)
 
     async def _procesar_respuestas(self, sesion):
         """Gemini -> navegador, resolviendo herramientas por el camino."""
         async for respuesta in sesion.receive():
             if respuesta.data:
                 await self._enviar(respuesta.data)  # audio crudo
+                self.bytes_salida += len(respuesta.data)
 
             contenido = respuesta.server_content
             if contenido:

@@ -1,11 +1,14 @@
 /**
  * AudioWorklet de captura.
  *
- * Corre en el hilo de audio: convierte los bloques Float32 del micrófono a
- * PCM de 16 bits little-endian y los manda al hilo principal, que los empuja
- * por el WebSocket. Acumula ~100 ms por envío para no ahogar la conexión
- * con paquetes de 128 muestras.
+ * Corre en el hilo de audio. El micrófono entrega la tasa nativa del sistema
+ * (44.1 o 48 kHz en la mayoría de los Mac), así que aquí se remuestrea a los
+ * 16 kHz que pide la Live API y se convierte a PCM de 16 bits little-endian.
+ *
+ * Forzar el AudioContext a 16 kHz parece más simple, pero según el navegador
+ * falla o deforma la señal cuando el hardware no soporta esa tasa.
  */
+const TASA_DESTINO = 16000;
 const MUESTRAS_POR_ENVIO = 1600; // 100 ms a 16 kHz
 
 class CapturaPCM extends AudioWorkletProcessor {
@@ -13,15 +16,29 @@ class CapturaPCM extends AudioWorkletProcessor {
     super();
     this.buffer = new Int16Array(MUESTRAS_POR_ENVIO);
     this.escritas = 0;
+    this.razon = sampleRate / TASA_DESTINO; // sampleRate es global aquí
+    this.posicion = 0;
+    this.resto = new Float32Array(0);
+    this.port.postMessage({ tipo: "inicio", tasaEntrada: sampleRate });
   }
 
   process(entradas) {
     const canal = entradas[0]?.[0];
     if (!canal) return true;
 
-    for (let i = 0; i < canal.length; i++) {
-      // Float32 [-1, 1] -> Int16, saturando en los extremos
-      const m = Math.max(-1, Math.min(1, canal[i]));
+    // La cola del bloque anterior se une al bloque nuevo: el remuestreo cae
+    // casi siempre entre dos muestras y necesita continuidad entre bloques.
+    const datos = new Float32Array(this.resto.length + canal.length);
+    datos.set(this.resto, 0);
+    datos.set(canal, this.resto.length);
+
+    let pos = this.posicion;
+    while (pos + 1 < datos.length) {
+      const i = Math.floor(pos);
+      const frac = pos - i;
+      const muestra = datos[i] * (1 - frac) + datos[i + 1] * frac;
+
+      const m = Math.max(-1, Math.min(1, muestra));
       this.buffer[this.escritas++] = m < 0 ? m * 0x8000 : m * 0x7fff;
 
       if (this.escritas === MUESTRAS_POR_ENVIO) {
@@ -30,7 +47,12 @@ class CapturaPCM extends AudioWorkletProcessor {
         this.port.postMessage(copia.buffer, [copia.buffer]);
         this.escritas = 0;
       }
+      pos += this.razon;
     }
+
+    const consumidas = Math.floor(pos);
+    this.resto = datos.slice(consumidas);
+    this.posicion = pos - consumidas;
     return true;
   }
 }
