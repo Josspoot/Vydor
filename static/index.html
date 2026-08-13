@@ -17,7 +17,6 @@
     --apagado: #6b7385;
     --acento: #4ade80;
     --alerta: #f87171;
-    --aviso: #fbbf24;
 
     /* Serie de la gráfica. Validadas contra #171a21: banda de luminosidad,
        piso de croma, separación CVD 8.4, visión normal 19.8, contraste >=3:1. */
@@ -27,63 +26,97 @@
 
     --rejilla: #2c2c2a;
     --radio: 14px;
+    --lateral: 260px;
   }
   * { box-sizing: border-box; }
   html { -webkit-text-size-adjust: 100%; }
   body {
     margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
     background: var(--fondo); color: var(--texto);
-    display: flex; flex-direction: column; min-height: 100vh;
-    line-height: 1.5;
+    display: flex; flex-direction: column; min-height: 100vh; line-height: 1.5;
   }
+  h1, h2, h3 { margin: 0; }
+  .apagado { color: var(--apagado); font-weight: 400; }
 
   /* ------------------------------------------------------------ cabecera */
   header {
-    padding: 14px 20px; border-bottom: 1px solid var(--borde);
-    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-    background: var(--panel); position: sticky; top: 0; z-index: 10;
+    padding: 10px 16px; border-bottom: 1px solid var(--borde);
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    background: var(--panel); position: sticky; top: 0; z-index: 20;
   }
-  .marca { font-size: 16px; font-weight: 650; letter-spacing: -0.01em; }
+  .marca { font-size: 15px; font-weight: 650; letter-spacing: -0.01em; }
   .marca span { color: var(--tenue); font-weight: 400; }
+  .pestanas { display: flex; gap: 3px; background: var(--fondo); padding: 3px; border-radius: 10px; }
+  .pestana {
+    background: none; border: 0; color: var(--tenue); font-family: inherit;
+    font-size: 13px; font-weight: 600; padding: 7px 14px; border-radius: 7px; cursor: pointer;
+  }
+  .pestana:hover { color: var(--texto); }
+  .pestana[aria-selected="true"] { background: var(--panel-alto); color: var(--texto); }
   .estado {
-    font-size: 13px; color: var(--tenue); margin-left: auto;
+    font-size: 12.5px; color: var(--tenue); margin-left: auto;
     display: flex; align-items: center; gap: 7px;
   }
-  .punto {
-    width: 8px; height: 8px; border-radius: 50%; background: var(--apagado);
-    flex: none;
-  }
+  .punto { width: 8px; height: 8px; border-radius: 50%; background: var(--apagado); flex: none; }
   .punto.activo { background: var(--acento); box-shadow: 0 0 8px var(--acento); }
   .punto.error { background: var(--alerta); }
-  button {
+  button { font-family: inherit; }
+  #boton {
     background: var(--acento); color: #06240f; border: 0; border-radius: 10px;
-    padding: 10px 18px; font-size: 14px; font-weight: 650; cursor: pointer;
-    font-family: inherit;
+    padding: 9px 16px; font-size: 13.5px; font-weight: 650; cursor: pointer;
   }
-  button:hover { filter: brightness(1.08); }
-  button.detener { background: var(--alerta); color: #2b0707; }
+  #boton:hover { filter: brightness(1.08); }
+  #boton.detener { background: var(--alerta); color: #2b0707; }
+  #abrirHistorial {
+    display: none; background: var(--panel-alto); color: var(--texto);
+    border: 1px solid var(--borde); border-radius: 9px; padding: 8px 11px; cursor: pointer;
+  }
 
   /* -------------------------------------------------------------- diseño */
   main {
-    flex: 1; display: grid; gap: 16px; padding: 16px;
-    grid-template-columns: minmax(0, 380px) minmax(0, 1fr);
-    align-items: start; width: 100%; max-width: 1400px; margin: 0 auto;
-  }
-  @media (max-width: 900px) {
-    main { grid-template-columns: 1fr; }
-    #conversacion { max-height: 34vh; }
+    flex: 1; display: grid; gap: 14px; padding: 14px;
+    grid-template-columns: var(--lateral) minmax(0, 1fr);
+    align-items: start; width: 100%; max-width: 1500px; margin: 0 auto;
   }
   .panel {
     background: var(--panel); border: 1px solid var(--borde);
     border-radius: var(--radio); padding: 18px; min-width: 0;
   }
-  .panel h2 {
+  .panel > h2 {
     font-size: 11px; text-transform: uppercase; letter-spacing: .09em;
-    color: var(--apagado); margin: 0 0 14px; font-weight: 600;
+    color: var(--apagado); margin-bottom: 14px; font-weight: 600;
   }
 
+  /* ----------------------------------------------------------- historial */
+  #historial {
+    background: var(--panel); border: 1px solid var(--borde);
+    border-radius: var(--radio); padding: 12px; position: sticky; top: 70px;
+    max-height: calc(100vh - 86px); overflow-y: auto;
+  }
+  #historial h3 {
+    font-size: 10px; text-transform: uppercase; letter-spacing: .09em;
+    color: var(--apagado); margin: 16px 0 7px; font-weight: 600;
+  }
+  .nueva {
+    width: 100%; background: var(--panel-alto); color: var(--texto);
+    border: 1px solid var(--borde); border-radius: 9px; padding: 9px;
+    font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .nueva:hover { border-color: var(--acento); }
+  .item {
+    display: block; width: 100%; text-align: left; background: none; border: 0;
+    border-radius: 8px; padding: 8px 9px; margin-bottom: 2px; cursor: pointer; color: var(--texto);
+  }
+  .item:hover { background: var(--panel-alto); }
+  .item.activo { background: var(--panel-alto); box-shadow: inset 2px 0 0 var(--acento); }
+  .item .titulo {
+    display: block; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .item .meta { display: block; font-size: 11px; color: var(--apagado); margin-top: 1px; }
+  .pequeno { font-size: 12.5px; padding: 4px 9px; }
+
   /* -------------------------------------------------------- conversación */
-  #conversacion { max-height: 66vh; overflow-y: auto; overscroll-behavior: contain; }
+  #conversacion { max-height: 62vh; overflow-y: auto; overscroll-behavior: contain; }
   .turno { margin-bottom: 14px; font-size: 14px; }
   .turno .quien {
     font-size: 10px; text-transform: uppercase; letter-spacing: .07em;
@@ -91,9 +124,7 @@
   }
   .turno.coach .quien { color: var(--acento); }
   .turno.sistema { color: var(--tenue); font-style: italic; font-size: 13px; }
-
-  /* --------------------------------------------------------------- vacío */
-  .vacio { color: var(--tenue); font-size: 14px; }
+  .vacio { color: var(--tenue); font-size: 14px; margin: 0; }
   .vacio strong { color: var(--texto); font-weight: 600; }
   .ejemplos { margin: 14px 0 0; padding: 0; list-style: none; }
   .ejemplos li {
@@ -103,11 +134,10 @@
   .ejemplos li::before { content: "“"; }
   .ejemplos li::after { content: "”"; }
 
-  /* ---------------------------------------------------------- resumen del plan */
+  /* -------------------------------------------------------- resumen plan */
   .hero {
-    display: flex; flex-wrap: wrap; gap: 20px 28px; align-items: flex-end;
-    padding-bottom: 16px; margin-bottom: 16px;
-    border-bottom: 1px solid var(--borde);
+    display: flex; flex-wrap: wrap; gap: 18px 28px; align-items: flex-end;
+    padding-bottom: 16px; margin-bottom: 16px; border-bottom: 1px solid var(--borde);
   }
   .cifra { display: flex; flex-direction: column; gap: 2px; }
   .cifra .valor { font-size: 30px; font-weight: 680; letter-spacing: -0.02em; }
@@ -122,21 +152,15 @@
   }
   .veredicto .icono { font-size: 15px; line-height: 1.35; flex: none; }
   .veredicto.viable { border-color: #1c5c33; }
-  .veredicto.ajustado { border-color: #6b5312; }
+  .veredicto.ajustado, .veredicto.demasiado_largo { border-color: #6b5312; }
   .veredicto.no_recomendado { border-color: #6b2020; }
   .veredicto b { display: block; margin-bottom: 2px; }
 
-  /* -------------------------------------------------------------- ritmos */
   .bloque { margin-bottom: 24px; }
-  .bloque > h3 {
-    font-size: 13px; margin: 0 0 4px; font-weight: 650;
-  }
-  .bloque > .pie { font-size: 12.5px; color: var(--tenue); margin: 0 0 12px; }
+  .bloque > h3 { font-size: 13px; margin-bottom: 4px; font-weight: 650; }
+  .bloque > .pie, .pie { font-size: 12.5px; color: var(--tenue); margin: 0 0 12px; }
   .ritmos { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
-  .ritmo {
-    background: var(--panel-alto); border: 1px solid var(--borde);
-    border-radius: 10px; padding: 11px 13px;
-  }
+  .ritmo { background: var(--panel-alto); border: 1px solid var(--borde); border-radius: 10px; padding: 11px 13px; }
   .ritmo .cab { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
   .ritmo .zona { font-size: 13px; font-weight: 650; }
   .ritmo .valor { font-size: 14px; font-weight: 650; font-variant-numeric: tabular-nums; }
@@ -157,16 +181,15 @@
   .rejilla i { position: absolute; left: 0; right: 0; border-top: 1px solid var(--rejilla); }
   .barra {
     flex: 1 1 0; min-width: 0; position: relative; cursor: pointer;
-    border-radius: 4px 4px 0 0; background: var(--fase-normal);
-    transition: filter .12s;
+    border-radius: 4px 4px 0 0; background: var(--fase-normal); transition: filter .12s;
   }
   .barra.recuperacion { background: var(--fase-recuperacion); }
-  .barra.afinamiento  { background: var(--fase-afinamiento); }
+  .barra.afinamiento { background: var(--fase-afinamiento); }
   .barra:hover { filter: brightness(1.25); }
   .barra.sel { outline: 2px solid var(--texto); outline-offset: 1px; }
   .ejeX {
-    display: flex; gap: 2px; margin-top: 6px;
-    font-size: 10px; color: var(--apagado); font-variant-numeric: tabular-nums;
+    display: flex; gap: 2px; margin-top: 6px; font-size: 10px;
+    color: var(--apagado); font-variant-numeric: tabular-nums;
   }
   .ejeX span { flex: 1 1 0; text-align: center; min-width: 0; overflow: hidden; }
   .leyenda {
@@ -181,30 +204,27 @@
     position: fixed; z-index: 30; pointer-events: none; opacity: 0;
     background: var(--panel-alto); border: 1px solid var(--borde);
     border-radius: 9px; padding: 8px 11px; font-size: 12.5px;
-    box-shadow: 0 6px 20px rgba(0,0,0,.45); transition: opacity .1s;
-    max-width: 220px;
+    box-shadow: 0 6px 20px rgba(0,0,0,.45); transition: opacity .1s; max-width: 220px;
   }
   #globo b { display: block; margin-bottom: 2px; }
   #globo .m { color: var(--tenue); }
 
-  /* ------------------------------------------------------- semana a semana */
+  /* --------------------------------------------------- semana a semana */
   .fichas { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 14px; }
   .ficha {
     background: var(--panel-alto); border: 1px solid var(--borde); color: var(--tenue);
     border-radius: 8px; padding: 5px 10px; font-size: 12.5px; cursor: pointer;
-    font-family: inherit; font-variant-numeric: tabular-nums;
+    font-variant-numeric: tabular-nums;
   }
   .ficha:hover { color: var(--texto); }
   .ficha[aria-pressed="true"] {
-    background: var(--texto); border-color: var(--texto); color: var(--fondo);
-    font-weight: 650;
+    background: var(--texto); border-color: var(--texto); color: var(--fondo); font-weight: 650;
   }
   .dias { display: grid; gap: 6px; }
   .dia {
-    display: grid; grid-template-columns: 82px 1fr auto; gap: 12px;
-    align-items: baseline; padding: 11px 13px; border-radius: 10px;
-    background: var(--panel-alto); border: 1px solid var(--borde);
-    font-size: 13.5px;
+    display: grid; grid-template-columns: 82px 1fr auto; gap: 12px; align-items: baseline;
+    padding: 11px 13px; border-radius: 10px; background: var(--panel-alto);
+    border: 1px solid var(--borde); font-size: 13.5px;
   }
   @media (max-width: 560px) {
     .dia { grid-template-columns: 1fr auto; }
@@ -226,538 +246,168 @@
   }
   .resumenSemana b { color: var(--texto); font-variant-numeric: tabular-nums; }
 
-  .botonTelegram {
-    display: inline-block; background: var(--panel-alto); color: var(--texto);
-    border: 1px solid #2f4a6d; border-radius: 10px; padding: 10px 15px;
-    font-size: 13.5px; font-weight: 600; text-decoration: none;
+  /* ---------------------------------------------------------- calendario */
+  .cabMes { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  .tituloMes { font-size: 16px; font-weight: 650; text-transform: capitalize; }
+  .flecha {
+    background: var(--panel-alto); border: 1px solid var(--borde); color: var(--texto);
+    border-radius: 8px; width: 30px; height: 30px; font-size: 16px; cursor: pointer; line-height: 1;
   }
-  .botonTelegram:hover { border-color: var(--fase-normal); }
-  .pieTelegram { font-size: 12px; color: var(--apagado); margin: 7px 0 0; }
+  .flecha:disabled { opacity: .3; cursor: not-allowed; }
+  .rejillaMes {
+    display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; margin-top: 10px;
+  }
+  .cabDia {
+    text-align: center; font-size: 10px; color: var(--apagado);
+    text-transform: uppercase; letter-spacing: .06em; font-weight: 600; padding-bottom: 2px;
+  }
+  .celda {
+    min-height: 62px; border-radius: 8px; padding: 5px 6px; font-size: 11px;
+    background: var(--panel-alto); border: 1px solid var(--borde);
+    display: flex; flex-direction: column; gap: 1px;
+  }
+  .celda.vacia { background: transparent; border-color: transparent; }
+  .celda.fuera { opacity: .35; }
+  .celda[data-semana] { cursor: pointer; }
+  .celda[data-semana]:hover { border-color: var(--texto); }
+  .celda.hoy { outline: 2px solid var(--acento); outline-offset: -1px; }
+  .celda .num { font-variant-numeric: tabular-nums; color: var(--apagado); font-weight: 600; }
+  .celda .et { font-weight: 650; font-size: 11px; }
+  .celda .k { color: var(--tenue); font-variant-numeric: tabular-nums; }
+  .celda.normal .et { color: var(--fase-normal); }
+  .celda.recuperacion .et { color: var(--fase-recuperacion); }
+  .celda.afinamiento .et { color: var(--fase-afinamiento); }
+
+  /* ------------------------------------------------------------ acciones */
+  .acciones { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+  .accion {
+    background: var(--panel-alto); color: var(--texto); border: 1px solid var(--borde);
+    border-radius: 10px; padding: 9px 14px; font-size: 13px; font-weight: 600;
+    cursor: pointer; text-decoration: none; display: inline-block;
+  }
+  .accion:hover { border-color: var(--acento); }
+  .pieTelegram { font-size: 12px; color: var(--apagado); margin: 0 0 18px; }
   .aviso {
     font-size: 12px; color: var(--apagado); margin-top: 20px;
     padding-top: 14px; border-top: 1px solid var(--borde);
+  }
+
+  /* ---------------------------------------------------------- responsive */
+  @media (max-width: 980px) {
+    main { grid-template-columns: 1fr; }
+    #abrirHistorial { display: block; }
+    #historial {
+      position: fixed; inset: 56px auto 0 0; width: var(--lateral); z-index: 15;
+      border-radius: 0; max-height: none; transform: translateX(-100%);
+      transition: transform .18s; box-shadow: 8px 0 24px rgba(0,0,0,.4);
+    }
+    body.historialAbierto #historial { transform: none; }
+    #conversacion { max-height: 50vh; }
+  }
+  @media (max-width: 620px) {
+    .celda { min-height: 50px; font-size: 10px; }
+    .cifra .valor { font-size: 25px; }
+  }
+
+  /* ----------------------------------------------------------- impresión */
+  /* En pantalla se ve una semana cada vez; un PDF con solo esa no serviría,
+     así que se imprime una vista aparte con el plan entero desplegado. */
+  #paraImprimir { display: none; }
+  @media print {
+    body > header, main, #globo { display: none !important; }
+    #paraImprimir {
+      display: block; color: #000; background: #fff; font-size: 10.5pt; padding: 0; margin: 0;
+    }
+    #paraImprimir h1 { font-size: 18pt; margin: 0 0 2mm; }
+    #paraImprimir h2 { font-size: 12pt; margin: 0 0 1mm; }
+    .metaImpresa { color: #444; margin: 0 0 4mm; font-size: 9.5pt; }
+    .veredictoImpreso {
+      border: 1pt solid #999; padding: 3mm; border-radius: 2mm; margin: 0 0 6mm; font-size: 10pt;
+    }
+    /* Sin esto cada semana se lleva una página entera y el PDF sale con la
+       mitad en blanco. Lo que no debe partirse es la fila de un día ni el
+       título separado de su tabla; las semanas pueden fluir. */
+    .semanaImpresa { margin-bottom: 7mm; }
+    .semanaImpresa h2, .semanaImpresa .metaImpresa {
+      break-after: avoid; page-break-after: avoid;
+    }
+    #paraImprimir tr { break-inside: avoid; page-break-inside: avoid; }
+    #paraImprimir table { width: 100%; border-collapse: collapse; }
+    #paraImprimir td { border-bottom: 0.4pt solid #ccc; padding: 1.6mm 2mm; vertical-align: top; }
+    #paraImprimir td.d { width: 24mm; color: #444; font-size: 9pt; }
+    #paraImprimir td.km { width: 20mm; text-align: right; white-space: nowrap; }
+    #paraImprimir td.t span { color: #444; font-size: 9.5pt; }
+    .descansoImpreso { color: #888; }
+    .ritmosImpresos { margin-bottom: 6mm; }
+    .avisoImpreso {
+      margin-top: 8mm; font-size: 8.5pt; color: #666;
+      border-top: 0.4pt solid #ccc; padding-top: 2mm;
+    }
+    @page { margin: 14mm 12mm; }
   }
 </style>
 </head>
 <body>
 <header>
+  <button id="abrirHistorial" aria-label="Historial">☰</button>
   <div class="marca">Vydor <span>· entrenador de running</span></div>
+  <div class="pestanas" role="tablist">
+    <button class="pestana" data-vista="chat" role="tab" aria-selected="true">Chat</button>
+    <button class="pestana" data-vista="plan" role="tab" aria-selected="false">Plan</button>
+    <button class="pestana" data-vista="calendario" role="tab" aria-selected="false">Calendario</button>
+  </div>
   <button id="boton">Hablar con Vydor</button>
   <div class="estado"><span class="punto" id="punto"></span><span id="estado">desconectado</span></div>
 </header>
 
 <main>
-  <section class="panel">
-    <h2>Conversación</h2>
-    <div id="conversacion">
-      <p class="vacio">Pulsa <strong>Hablar con Vydor</strong> y cuéntale qué carrera tienes en mente.</p>
-      <ul class="ejemplos">
-        <li>Quiero correr un 10K en 12 semanas</li>
-        <li>Corro 25 kilómetros por semana y puedo entrenar 4 días</li>
-        <li>Me duele la rodilla desde el martes</li>
-      </ul>
-    </div>
-  </section>
+  <aside id="historial"></aside>
 
-  <section class="panel">
-    <h2>Tu plan</h2>
-    <div id="plan">
-      <p class="vacio">Aquí aparecerá tu plan en cuanto Vydor lo arme: los ritmos a los
-        que debes correr y qué hacer cada día de cada semana.</p>
-    </div>
-    <div id="telegram" hidden>
-      <a id="enlaceTelegram" class="botonTelegram" target="_blank" rel="noopener">
-        Recibir el entrenamiento cada mañana por Telegram
-      </a>
-      <p class="pieTelegram">Se abre el chat con el bot; no hay que registrarse ni copiar nada.</p>
-    </div>
-    <p class="aviso">
-      Orientación de entrenamiento, no consejo médico. Ante dolor persistente,
-      consulta a un profesional de la salud.
-    </p>
-  </section>
+  <div>
+    <section class="vista panel" id="vista-chat">
+      <h2>Conversación</h2>
+      <div id="conversacion">
+        <p class="vacio">Pulsa <strong>Hablar con Vydor</strong> y cuéntale qué carrera tienes en mente.</p>
+        <ul class="ejemplos">
+          <li>Quiero correr un 10K en 12 semanas</li>
+          <li>Corro 25 kilómetros por semana y puedo entrenar 4 días</li>
+          <li>Me duele la rodilla desde el martes</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="vista panel" id="vista-plan" hidden>
+      <h2>Tu plan</h2>
+      <div id="accionesPlan" hidden>
+        <div class="acciones">
+          <button class="accion" id="pdf">Descargar plan en PDF</button>
+        </div>
+      </div>
+      <div id="plan">
+        <p class="vacio">Aquí aparecerá tu plan en cuanto Vydor lo arme: los ritmos a los
+          que debes correr y qué hacer cada día de cada semana.</p>
+      </div>
+      <div id="telegram" hidden>
+        <div class="acciones">
+          <a id="enlaceTelegram" class="accion" target="_blank" rel="noopener">
+            Recibir el entrenamiento cada mañana por Telegram
+          </a>
+        </div>
+        <p class="pieTelegram">Se abre el chat con el bot; no hay que registrarse ni copiar nada.</p>
+      </div>
+      <p class="aviso">
+        Orientación de entrenamiento, no consejo médico. Ante dolor persistente,
+        consulta a un profesional de la salud.
+      </p>
+    </section>
+
+    <section class="vista" id="vista-calendario" hidden></section>
+  </div>
 </main>
 
 <div id="globo" role="status"></div>
+<div id="paraImprimir"></div>
 
-<script>
-const boton = document.getElementById("boton");
-const estado = document.getElementById("estado");
-const punto = document.getElementById("punto");
-const conversacion = document.getElementById("conversacion");
-const panelPlan = document.getElementById("plan");
-const globo = document.getElementById("globo");
-
-let ws, ctxEntrada, ctxSalida, micro, worklet;
-let activo = false;
-let siguienteInicio = 0;
-let fuentes = [];
-let ultimoQuien = null;
-let bytesEnviados = 0;
-let medidor = null;
-let hayVoz = false;
-let estadoTurno = "escuchando";
-let finReproduccion = 0;
-let planActual = null;
-let semanaVista = 0;
-
-/* ====================================================================
-   Traducción del vocabulario de entrenador a lenguaje de a pie.
-   El motor habla en jerga; quien lee el plan puede no haber corrido nunca.
-   ==================================================================== */
-const NOMBRE_DIA = ["", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
-
-const NOMBRE_TIPO = {
-  descanso: "Descanso",
-  facil: "Rodaje suave",
-  largo: "Fondo largo",
-  tempo: "Ritmo controlado",
-  intervalos: "Series rápidas",
-  ritmo_objetivo: "Ritmo de carrera",
-  carrera: "¡Día de carrera!",
-};
-
-const NOMBRE_ZONA = {
-  facil: "Fácil",
-  maraton: "Ritmo de maratón",
-  umbral: "Umbral",
-  intervalo: "Intervalos",
-  repeticion: "Repeticiones",
-};
-
-// Las cinco fases del motor se agrupan en tres para la gráfica: al corredor le
-// importa si la semana suma, si toca recuperar, o si ya está afinando.
-const GRUPO_FASE = {
-  base: "normal", construccion: "normal",
-  descarga: "recuperacion",
-  afinamiento: "afinamiento", carrera: "afinamiento",
-};
-const NOMBRE_FASE = {
-  base: "Base", construccion: "Construcción", descarga: "Semana de recuperación",
-  afinamiento: "Afinamiento", carrera: "Semana de carrera",
-};
-const LEYENDA = [
-  ["normal", "Semanas que suman carga"],
-  ["recuperacion", "Recuperación: bajas para asimilar"],
-  ["afinamiento", "Afinamiento y carrera"],
-];
-
-const VEREDICTO = {
-  viable: { icono: "✓", titulo: "El objetivo es realista" },
-  ajustado: { icono: "!", titulo: "Se puede, pero con margen justo" },
-  no_recomendado: { icono: "✕", titulo: "Este objetivo es arriesgado" },
-};
-
-function esc(t) {
-  return String(t).replace(/[&<>"]/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-}
-
-const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.round(s) % 60).padStart(2, "0")}`;
-
-function tiempoHablado(seg) {
-  const h = Math.floor(seg / 3600);
-  const m = Math.round((seg % 3600) / 60);
-  return h ? `${h}h ${String(m).padStart(2, "0")}m` : `${m} min`;
-}
-
-/* ==================================================== dibujar el plan ==== */
-
-function dibujarPlan(plan) {
-  planActual = plan;
-  // Se abre en la primera semana: es la que el corredor hará ahora.
-  semanaVista = 0;
-  panelPlan.innerHTML = seccionResumen(plan) + seccionRitmos(plan) +
-                        seccionGrafica(plan) + '<div class="bloque" id="detalleSemana"></div>';
-  conectarGrafica();
-  pintarSemana();
-}
-
-function seccionResumen(plan) {
-  const v = plan.viabilidad;
-  const meta = VEREDICTO[v.veredicto] || VEREDICTO.ajustado;
-  const objetivo = plan.tiempo_objetivo_s
-    ? `<div class="cifra"><span class="valor">${tiempoHablado(plan.tiempo_objetivo_s)}</span>
-         <span class="rotulo">Tiempo alcanzable</span></div>` : "";
-
-  return `
-    <div class="hero">
-      <div class="cifra">
-        <span class="valor">${esc(plan.distancia.toUpperCase())}</span>
-        <span class="rotulo">Tu carrera</span>
-      </div>
-      <div class="cifra">
-        <span class="valor">${plan.semanas}</span>
-        <span class="rotulo">Semanas de plan</span>
-      </div>
-      <div class="cifra">
-        <span class="valor">${plan.dias_por_semana}</span>
-        <span class="rotulo">Días por semana</span>
-      </div>
-      ${objetivo}
-    </div>
-    <div class="veredicto ${v.veredicto}">
-      <span class="icono">${meta.icono}</span>
-      <span><b>${meta.titulo}</b>${esc(v.razon)}</span>
-    </div>`;
-}
-
-function seccionRitmos(plan) {
-  const zonas = Object.entries(plan.ritmos || {});
-  if (!zonas.length) {
-    return `<div class="bloque">
-      <h3>Tus ritmos</h3>
-      <p class="pie">Todavía no los tenemos. Dile a Vydor una marca reciente
-      —por ejemplo, cuánto tardaste en tu último 10K— y calculará a qué ritmo
-      debes correr cada tipo de entrenamiento.</p></div>`;
-  }
-  const tarjetas = zonas.map(([zona, r]) => `
-    <div class="ritmo">
-      <div class="cab">
-        <span class="zona">${esc(NOMBRE_ZONA[zona] || zona)}</span>
-        <span class="valor">${esc(formatoRitmo(r))}</span>
-      </div>
-      <div class="desc">${esc(r.descripcion)}</div>
-    </div>`).join("");
-
-  return `<div class="bloque">
-    <h3>Tus ritmos${plan.vdot ? ` <span style="color:var(--apagado);font-weight:400">· VDOT ${plan.vdot}</span>` : ""}</h3>
-    <p class="pie">Minutos por kilómetro. Salen de tu marca real, no de una tabla genérica.</p>
-    <div class="ritmos">${tarjetas}</div>
-  </div>`;
-}
-
-function formatoRitmo(r) {
-  return r.seg_por_km_rapido === r.seg_por_km_lento
-    ? mmss(r.seg_por_km_rapido)
-    : `${mmss(r.seg_por_km_rapido)}–${mmss(r.seg_por_km_lento)}`;
-}
-
-function seccionGrafica(plan) {
-  const semanas = plan.semanas_plan;
-  const tope = Math.max(...semanas.map((s) => s.km_total));
-  // Escala redondeada a la decena superior, para que las guías sean cifras limpias.
-  const techo = Math.ceil(tope / 10) * 10;
-
-  const barras = semanas.map((s, i) => {
-    const alto = Math.max(3, (s.km_total / techo) * 100);
-    return `<div class="barra ${GRUPO_FASE[s.fase]}" style="height:${alto}%"
-              data-i="${i}" role="button" tabindex="0"
-              aria-label="Semana ${s.numero}, ${s.km_total} kilómetros, ${NOMBRE_FASE[s.fase]}"></div>`;
-  }).join("");
-
-  // Una etiqueta cada pocas semanas: con 18 no caben todas sin amontonarse.
-  const paso = semanas.length > 12 ? 4 : 2;
-  const ejeX = semanas.map((s, i) =>
-    `<span>${i === 0 || (i + 1) % paso === 0 ? s.numero : ""}</span>`).join("");
-
-  const guias = [0.5, 1].map((f) =>
-    `<i style="top:${(1 - f) * 100}%"></i>`).join("");
-  const marcasY = [0.5, 1].map((f) =>
-    `<span style="top:${(1 - f) * 100}%">${Math.round(techo * f)}</span>`).join("");
-
-  const leyenda = LEYENDA.map(([clase, texto]) =>
-    `<span><i style="background:var(--fase-${clase})"></i>${texto}</span>`).join("");
-
-  return `<div class="bloque">
-    <h3>Cómo avanza tu plan</h3>
-    <p class="pie">Kilómetros por semana. No sube en línea recta a propósito:
-      cada pocas semanas baja para que el cuerpo asimile la carga.</p>
-    <div class="grafica">
-      <div class="ejeY">${marcasY}</div>
-      <div class="lienzo" id="lienzo">
-        <div class="rejilla">${guias}</div>
-        ${barras}
-      </div>
-      <div class="ejeX">${ejeX}</div>
-    </div>
-    <div class="leyenda">${leyenda}</div>
-  </div>`;
-}
-
-function conectarGrafica() {
-  const lienzo = document.getElementById("lienzo");
-  if (!lienzo) return;
-
-  lienzo.querySelectorAll(".barra").forEach((barra) => {
-    const i = +barra.dataset.i;
-    const elegir = () => { semanaVista = i; pintarSemana(); };
-    barra.addEventListener("click", elegir);
-    barra.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); elegir(); }
-    });
-    barra.addEventListener("mouseenter", (e) => mostrarGlobo(e, i));
-    barra.addEventListener("mousemove", (e) => colocarGlobo(e));
-    barra.addEventListener("mouseleave", () => (globo.style.opacity = 0));
-  });
-}
-
-function mostrarGlobo(ev, i) {
-  const s = planActual.semanas_plan[i];
-  globo.innerHTML = `<b>Semana ${s.numero} · ${NOMBRE_FASE[s.fase]}</b>
-    <span class="m">${s.km_total.toFixed(1)} km en total` +
-    (s.km_fondo > 0 ? ` · fondo de ${s.km_fondo.toFixed(1)} km` : "") + `</span>`;
-  globo.style.opacity = 1;
-  colocarGlobo(ev);
-}
-
-function colocarGlobo(ev) {
-  const ancho = globo.offsetWidth;
-  const x = Math.min(Math.max(ev.clientX - ancho / 2, 8), innerWidth - ancho - 8);
-  globo.style.left = x + "px";
-  globo.style.top = (ev.clientY - globo.offsetHeight - 12) + "px";
-}
-
-function pintarSemana() {
-  const destino = document.getElementById("detalleSemana");
-  if (!destino || !planActual) return;
-
-  const semanas = planActual.semanas_plan;
-  const s = semanas[semanaVista];
-
-  document.querySelectorAll(".barra").forEach((b) =>
-    b.classList.toggle("sel", +b.dataset.i === semanaVista));
-
-  const fichas = semanas.map((x, i) =>
-    `<button class="ficha" data-i="${i}" aria-pressed="${i === semanaVista}">${x.numero}</button>`
-  ).join("");
-
-  const dias = s.sesiones.map((ses) => {
-    const clase = ses.tipo === "descanso" ? "descanso"
-      : ses.tipo === "carrera" ? "carrera"
-      : ["tempo", "intervalos", "ritmo_objetivo", "largo"].includes(ses.tipo) ? "clave" : "";
-    const km = ses.km > 0 ? `${ses.km.toFixed(1)} km` : "";
-    return `<div class="dia ${clase}">
-      <span class="nombre">${NOMBRE_DIA[ses.dia]}</span>
-      <span class="que">${esc(NOMBRE_TIPO[ses.tipo] || ses.tipo)}
-        <span class="detalle">${esc(ses.detalle)}</span></span>
-      <span class="km">${km}</span>
-    </div>`;
-  }).join("");
-
-  destino.innerHTML = `
-    <h3>Semana a semana</h3>
-    <p class="pie">Toca una semana para ver qué toca cada día.</p>
-    <div class="fichas">${fichas}</div>
-    <div class="resumenSemana">
-      <span>Semana ${s.numero} de ${planActual.semanas} · <b>${NOMBRE_FASE[s.fase]}</b></span>
-      <span>Total: <b>${s.km_total.toFixed(1)} km</b></span>
-      ${s.km_fondo > 0 ? `<span>Fondo: <b>${s.km_fondo.toFixed(1)} km</b></span>` : ""}
-    </div>
-    <div class="dias">${dias}</div>`;
-
-  destino.querySelectorAll(".ficha").forEach((f) =>
-    f.addEventListener("click", () => { semanaVista = +f.dataset.i; pintarSemana(); }));
-}
-
-/* ================================================== voz y conexión ==== */
-
-function coachOcupado() {
-  if (estadoTurno === "pensando") return true;
-  // Un margen tras la última muestra programada: la cola del altavoz sigue
-  // sonando un instante después de que se acabe el audio recibido.
-  return !!ctxSalida && ctxSalida.currentTime < finReproduccion + 0.4;
-}
-
-function arrancarMedidor() {
-  medidor = setInterval(() => {
-    if (!activo) return;
-    if (estadoTurno === "pensando") marcar("Vydor está pensando…", "activo");
-    else if (coachOcupado()) marcar("Vydor está hablando…", "activo");
-    else if (hayVoz) marcar("te escucho…", "activo");
-    else marcar("listo, habla cuando quieras");
-  }, 500);
-}
-
-function marcar(texto, clase = "") {
-  estado.textContent = texto;
-  punto.className = "punto " + clase;
-}
-
-async function iniciar() {
-  const stream = await navigator.mediaDevices.getUserMedia({
-    audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
-  });
-
-  // Id estable por dispositivo: es lo que permite que el coach recuerde al
-  // corredor en la siguiente conversación, sin cuentas ni contraseñas.
-  let corredor = localStorage.getItem("vydor-corredor");
-  if (!corredor) {
-    corredor = crypto.randomUUID();
-    localStorage.setItem("vydor-corredor", corredor);
-  }
-  const proto = location.protocol === "https:" ? "wss" : "ws";
-  ws = new WebSocket(`${proto}://${location.host}/ws?corredor=${corredor}`);
-  ws.binaryType = "arraybuffer";
-
-  ws.onmessage = (ev) =>
-    typeof ev.data === "string" ? manejarJson(JSON.parse(ev.data)) : reproducir(ev.data);
-  ws.onerror = () => marcar("error de conexión", "error");
-  ws.onclose = () => detener();
-
-  await new Promise((r) => (ws.onopen = r));
-
-  // Tasa nativa del sistema: el worklet remuestrea a 16 kHz. Forzar el
-  // contexto a 16 kHz falla en algunos navegadores según el hardware.
-  ctxEntrada = new AudioContext();
-  await ctxEntrada.audioWorklet.addModule("/static/captura-audio.js");
-  micro = ctxEntrada.createMediaStreamSource(stream);
-  worklet = new AudioWorkletNode(ctxEntrada, "captura-pcm");
-
-  worklet.port.onmessage = (ev) => {
-    if (ev.data.tipo === "inicio") {
-      console.log(`captura iniciada a ${ev.data.tasaEntrada} Hz -> 16000 Hz`);
-      return;
-    }
-    // Mientras el coach habla, el micrófono no cuenta. Su propia voz sale por
-    // los altavoces y vuelve a entrar: la cancelación de eco del navegador no
-    // la elimina del todo, la compuerta la tomaba por una interrupción y el
-    // servidor cancelaba el turno a media frase.
-    if (coachOcupado()) return;
-
-    if (ev.data.tipo === "voz") {
-      hayVoz = ev.data.activa;
-      // Al cerrarse la compuerta el turno está completo: el servidor abre una
-      // sesión de Gemini con este audio y el historial de la conversación.
-      if (!hayVoz && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ tipo: "fin_turno" }));
-      }
-      return;
-    }
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.send(ev.data);
-      bytesEnviados += ev.data.byteLength;
-    }
-  };
-
-  micro.connect(worklet);
-  // El grafo de Web Audio se evalúa desde el destino hacia atrás: un nodo sin
-  // salida conectada puede no ejecutar process() nunca. Este nodo mudo mantiene
-  // el worklet vivo sin que se oiga el propio micrófono.
-  const mudo = ctxEntrada.createGain();
-  mudo.gain.value = 0;
-  worklet.connect(mudo).connect(ctxEntrada.destination);
-
-  ctxSalida = new AudioContext({ sampleRate: 24000 });
-  siguienteInicio = 0;
-  finReproduccion = 0;
-
-  activo = true;
-  bytesEnviados = 0;
-  boton.textContent = "Terminar";
-  boton.classList.add("detener");
-  marcar("listo, habla cuando quieras", "activo");
-  arrancarMedidor();
-}
-
-function detener() {
-  if (!activo) return;
-  activo = false;
-  clearInterval(medidor);
-  ws?.readyState === WebSocket.OPEN && ws.close();
-  micro?.mediaStream?.getTracks().forEach((t) => t.stop());
-  ctxEntrada?.close();
-  ctxSalida?.close();
-  boton.textContent = "Hablar con Vydor";
-  boton.classList.remove("detener");
-  marcar("desconectado");
-}
-
-function manejarJson(msg) {
-  switch (msg.tipo) {
-    case "listo":
-      estadoTurno = "escuchando";
-      if (msg.conocido) escribirTurno("sistema", "Vydor ya te conoce de antes.");
-      break;
-    case "pensando":
-      estadoTurno = "pensando";
-      hayVoz = false;
-      break;
-    case "turno_listo":
-      estadoTurno = "escuchando";
-      // La compuerta arranca limpia: lo que oyó durante la respuesta era eco.
-      worklet?.port.postMessage({ tipo: "reset" });
-      break;
-    case "transcripcion":
-      escribirTurno(msg.quien, msg.texto);
-      break;
-    case "plan":
-      dibujarPlan(msg.plan);
-      break;
-    case "interrumpido":
-      fuentes.forEach((f) => { try { f.stop(); } catch {} });
-      fuentes = [];
-      siguienteInicio = 0;
-      finReproduccion = 0;
-      break;
-    case "fin":
-    case "error":
-      marcar(msg.mensaje || msg.motivo, "error");
-      escribirTurno("sistema", msg.mensaje || msg.motivo);
-      break;
-  }
-}
-
-function escribirTurno(quien, texto) {
-  conversacion.querySelector(".vacio")?.remove();
-  conversacion.querySelector(".ejemplos")?.remove();
-  // La API va transcribiendo por fragmentos: se anexan al mismo turno.
-  if (quien === ultimoQuien) {
-    conversacion.lastElementChild.querySelector(".texto").textContent += texto;
-  } else {
-    const div = document.createElement("div");
-    div.className = `turno ${quien}`;
-    div.innerHTML = `<span class="quien">${quien === "corredor" ? "Tú" : quien === "coach" ? "Vydor" : "Sistema"}</span><span class="texto"></span>`;
-    div.querySelector(".texto").textContent = texto;
-    conversacion.appendChild(div);
-    ultimoQuien = quien;
-  }
-  conversacion.scrollTop = conversacion.scrollHeight;
-}
-
-function reproducir(buffer) {
-  if (!ctxSalida) return;
-  const pcm = new Int16Array(buffer);
-  const audio = ctxSalida.createBuffer(1, pcm.length, 24000);
-  const canal = audio.getChannelData(0);
-  for (let i = 0; i < pcm.length; i++) canal[i] = pcm[i] / 32768;
-
-  const fuente = ctxSalida.createBufferSource();
-  fuente.buffer = audio;
-  fuente.connect(ctxSalida.destination);
-
-  // Encolar en el tiempo evita cortes entre trozos consecutivos.
-  const ahora = ctxSalida.currentTime;
-  siguienteInicio = Math.max(siguienteInicio, ahora);
-  fuente.start(siguienteInicio);
-  siguienteInicio += audio.duration;
-  finReproduccion = siguienteInicio;
-
-  fuentes.push(fuente);
-  fuente.onended = () => (fuentes = fuentes.filter((f) => f !== fuente));
-}
-
-boton.onclick = () =>
-  activo ? detener() : iniciar().catch((e) => marcar(e.message, "error"));
-
-/* El bloque de Telegram solo aparece si el servidor tiene bot configurado:
-   ofrecer un botón que no lleva a ningún sitio es peor que no ofrecerlo. */
-(async () => {
-  let corredor = localStorage.getItem("vydor-corredor");
-  if (!corredor) {
-    corredor = crypto.randomUUID();
-    localStorage.setItem("vydor-corredor", corredor);
-  }
-  try {
-    const r = await fetch(`/telegram/enlace?corredor=${corredor}`);
-    const d = await r.json();
-    if (!d.disponible) return;
-    document.getElementById("enlaceTelegram").href = d.url;
-    document.getElementById("telegram").hidden = false;
-  } catch {
-    /* sin Telegram configurado la app funciona igual */
-  }
-})();
-</script>
+<script src="/static/app.js"></script>
 </body>
 </html>

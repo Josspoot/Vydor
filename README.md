@@ -122,6 +122,32 @@ compartido no drene la cuota.
 - [x] Cliente web (captura 16 kHz, reproducción 24 kHz, barge-in)
 - [x] Memoria: historial de la conversación y perfil entre conversaciones
 - [x] Recordatorios proactivos por Telegram
+- [x] Historial navegable: varias charlas y varios planes a la vez
+- [x] Vistas de chat, plan semanal y calendario mensual
+- [x] Exportar el plan a PDF desglosado día a día
+
+## La interfaz
+
+Tres vistas sobre los mismos datos, más un historial lateral:
+
+- **Chat** — la conversación. Cada charla se guarda y se puede retomar días
+  después: su historial vuelve a entrar en la sesión y el coach sigue el hilo.
+- **Plan** — cifras del objetivo, veredicto de viabilidad, zonas de ritmo, la
+  forma del bloque en una gráfica, y el desglose de los siete días de cualquier
+  semana.
+- **Calendario** — el mes de un vistazo, con el día de hoy marcado. El plan se
+  organiza en semanas y esa sigue siendo la unidad; el mes es solo una forma de
+  mirarlo.
+
+Un corredor puede tener **varios planes a la vez** —preparar un 10K y pensar ya
+en la media— y el historial los lista todos.
+
+### PDF
+
+El botón *Descargar plan en PDF* abre el diálogo de impresión con una vista
+aparte que despliega **todas** las semanas con sus fechas reales, no solo la que
+se ve en pantalla. Se resuelve con una hoja de estilos de impresión: sin
+dependencias nuevas, y el maquetado ya era HTML.
 
 ## Recordatorios por Telegram
 
