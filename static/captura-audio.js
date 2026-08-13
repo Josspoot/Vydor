@@ -45,6 +45,19 @@ class CapturaPCM extends AudioWorkletProcessor {
     this.previos = [];
     this.cerrarTrasEmitir = false;
     this.port.postMessage({ tipo: "inicio", tasaEntrada: sampleRate });
+
+    // El hilo principal silencia el micrófono mientras el coach habla. Al
+    // volver a escuchar hay que descartar el estado acumulado con su eco,
+    // o la compuerta arrancaría medio abierta.
+    this.port.onmessage = (ev) => {
+      if (ev.data?.tipo === "reset") {
+        this.hablando = false;
+        this.bloquesDeCola = 0;
+        this.cerrarTrasEmitir = false;
+        this.previos = [];
+        this.pisoRuido = 0.01;
+      }
+    };
   }
 
   /** Decide si el bloque contiene voz y actualiza el estado de la compuerta. */

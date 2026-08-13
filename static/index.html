@@ -109,13 +109,23 @@ let bytesEnviados = 0;
 let medidor = null;
 let hayVoz = false;
 let estadoTurno = "escuchando";
+let finReproduccion = 0;
+
+/** ¿Está el coach pensando o todavía sonando por los altavoces? */
+function coachOcupado() {
+  if (estadoTurno === "pensando") return true;
+  // Un margen tras la última muestra programada: la cola del altavoz sigue
+  // sonando un instante después de que se acabe el audio recibido.
+  return !!ctxSalida && ctxSalida.currentTime < finReproduccion + 0.4;
+}
 
 // Sin esto no hay forma de saber si el micrófono está produciendo algo:
 // un fallo de captura y un silencio real se ven exactamente igual.
 function arrancarMedidor() {
   medidor = setInterval(() => {
     if (!activo) return;
-    if (estadoTurno === "pensando") marcar("Vydor está respondiendo…", "activo");
+    if (estadoTurno === "pensando") marcar("Vydor está pensando…", "activo");
+    else if (coachOcupado()) marcar("Vydor está hablando…", "activo");
     else if (hayVoz) marcar("te escucho…", "activo");
     else marcar("listo, habla cuando quieras");
   }, 500);
@@ -161,6 +171,12 @@ async function iniciar() {
       console.log(`captura iniciada a ${ev.data.tasaEntrada} Hz -> 16000 Hz`);
       return;
     }
+    // Mientras el coach habla, el micrófono no cuenta. Su propia voz sale por
+    // los altavoces y vuelve a entrar: la cancelación de eco del navegador no
+    // la elimina del todo, la compuerta la tomaba por una interrupción y el
+    // servidor cancelaba el turno a media frase.
+    if (coachOcupado()) return;
+
     if (ev.data.tipo === "voz") {
       hayVoz = ev.data.activa;
       // Al cerrarse la compuerta el turno está completo: el servidor abre una
@@ -186,6 +202,7 @@ async function iniciar() {
 
   ctxSalida = new AudioContext({ sampleRate: 24000 });
   siguienteInicio = 0;
+  finReproduccion = 0;
 
   activo = true;
   bytesEnviados = 0;
@@ -216,9 +233,12 @@ function manejarJson(msg) {
       break;
     case "pensando":
       estadoTurno = "pensando";
+      hayVoz = false;
       break;
     case "turno_listo":
       estadoTurno = "escuchando";
+      // La compuerta arranca limpia: lo que oyó durante la respuesta era eco.
+      worklet?.port.postMessage({ tipo: "reset" });
       break;
     case "transcripcion":
       escribirTurno(msg.quien, msg.texto);
@@ -231,6 +251,7 @@ function manejarJson(msg) {
       fuentes.forEach((f) => { try { f.stop(); } catch {} });
       fuentes = [];
       siguienteInicio = 0;
+      finReproduccion = 0;
       break;
     case "fin":
     case "error":
@@ -272,6 +293,7 @@ function reproducir(buffer) {
   siguienteInicio = Math.max(siguienteInicio, ahora);
   fuente.start(siguienteInicio);
   siguienteInicio += audio.duration;
+  finReproduccion = siguienteInicio;
 
   fuentes.push(fuente);
   fuente.onended = () => (fuentes = fuentes.filter((f) => f !== fuente));
