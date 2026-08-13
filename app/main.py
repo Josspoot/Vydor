@@ -15,7 +15,6 @@ from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from uuid import uuid4
 
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
@@ -42,21 +41,42 @@ ESTATICOS = RAIZ / "static"
 SESIONES_POR_IP_AL_DIA = int(os.getenv("MAX_SESSIONS_PER_IP", "20"))
 _historial: dict[str, deque[float]] = defaultdict(deque)
 
+def _programar_recordatorios() -> None:
+    """Programa el recordatorio diario, si la librería está disponible.
+
+    APScheduler se importa aquí y no arriba a propósito: los recordatorios son
+    opcionales, y que falte su dependencia no puede impedir que arranque el
+    coach de voz, que es el producto.
+    """
+    try:
+        from apscheduler.schedulers.asyncio import AsyncIOScheduler
+    except ImportError:
+        log.warning(
+            "apscheduler no está instalado: no habrá recordatorio automático. "
+            "Instálalo con 'uv pip install apscheduler', o lánzalos a mano con "
+            "'python -m app.telegram'."
+        )
+        return
+
+    planificador = AsyncIOScheduler(
+        timezone=os.getenv("TZ_RECORDATORIOS", "America/Mexico_City")
+    )
+    planificador.add_job(
+        telegram.enviar_recordatorios, "cron",
+        hour=telegram.HORA_RECORDATORIO, minute=0, id="recordatorio_diario",
+    )
+    planificador.start()
+    log.info("recordatorios diarios programados a las %02d:00",
+             telegram.HORA_RECORDATORIO)
+
+
 @asynccontextmanager
 async def ciclo_de_vida(_: FastAPI):
     """Arranca el bot de Telegram y el recordatorio diario, si están configurados."""
     tareas = []
     if telegram.configurado():
         tareas.append(asyncio.create_task(telegram.escuchar()))
-
-        planificador = AsyncIOScheduler(timezone=os.getenv("TZ_RECORDATORIOS", "America/Mexico_City"))
-        planificador.add_job(
-            telegram.enviar_recordatorios, "cron",
-            hour=telegram.HORA_RECORDATORIO, minute=0, id="recordatorio_diario",
-        )
-        planificador.start()
-        log.info("recordatorios diarios programados a las %02d:00",
-                 telegram.HORA_RECORDATORIO)
+        _programar_recordatorios()
     else:
         log.info("Telegram desactivado: define TELEGRAM_BOT_TOKEN para activarlo")
 
