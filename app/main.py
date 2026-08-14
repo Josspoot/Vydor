@@ -192,6 +192,10 @@ async def websocket_coach(ws: WebSocket):
                     evento = json.loads(texto)
                     if evento.get("tipo") == "fin_turno":
                         await entrantes.put(("fin_turno", None))
+                    elif evento.get("tipo") == "texto":
+                        escrito = str(evento.get("texto") or "").strip()[:2000]
+                        if escrito:
+                            await entrantes.put(("texto", escrito))
         except (WebSocketDisconnect, RuntimeError):
             pass
         except (ValueError, KeyError) as exc:

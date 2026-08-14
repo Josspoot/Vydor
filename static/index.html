@@ -134,6 +134,22 @@
   .ejemplos li::before { content: "“"; }
   .ejemplos li::after { content: "”"; }
 
+  .escribir { display: flex; gap: 8px; margin-top: 14px; }
+  .escribir input {
+    flex: 1; min-width: 0; background: var(--panel-alto); color: var(--texto);
+    border: 1px solid var(--borde); border-radius: 10px; padding: 11px 13px;
+    font-size: 14px; font-family: inherit;
+  }
+  .escribir input:focus { outline: none; border-color: var(--acento); }
+  .escribir input::placeholder { color: var(--apagado); }
+  .escribir button {
+    background: var(--panel-alto); color: var(--texto); border: 1px solid var(--borde);
+    border-radius: 10px; padding: 11px 16px; font-size: 13.5px; font-weight: 600;
+    cursor: pointer;
+  }
+  .escribir button:hover:not(:disabled) { border-color: var(--acento); }
+  .escribir button:disabled { opacity: .45; cursor: not-allowed; }
+
   /* -------------------------------------------------------- resumen plan */
   .hero {
     display: flex; flex-wrap: wrap; gap: 18px 28px; align-items: flex-end;
@@ -374,6 +390,11 @@
           <li>Me duele la rodilla desde el martes</li>
         </ul>
       </div>
+      <form id="formTexto" class="escribir">
+        <input id="entradaTexto" type="text" autocomplete="off"
+               placeholder="…o escríbele aquí si prefieres no hablar" />
+        <button type="submit" id="enviarTexto">Enviar</button>
+      </form>
     </section>
 
     <section class="vista panel" id="vista-plan" hidden>

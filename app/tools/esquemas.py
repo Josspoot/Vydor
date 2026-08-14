@@ -26,8 +26,11 @@ DECLARACIONES = [
             "properties": {
                 "distancia": {
                     "type": "STRING",
-                    "enum": ["5k", "10k", "21k", "42k"],
-                    "description": "Distancia objetivo.",
+                    "enum": ["1k", "3k", "5k", "10k", "21k", "42k"],
+                    "description": (
+                        "Distancia objetivo. Vale una meta pequeña: para quien "
+                        "empieza, correr 1 km seguido ya es una carrera."
+                    ),
                 },
                 "semanas": {
                     "type": "INTEGER",
@@ -35,11 +38,18 @@ DECLARACIONES = [
                 },
                 "km_semanales_actuales": {
                     "type": "NUMBER",
-                    "description": "Kilómetros que corre por semana actualmente.",
+                    "description": (
+                        "Kilómetros que corre por semana actualmente. Cero es un "
+                        "valor válido y frecuente: mucha gente empieza sin correr nada."
+                    ),
                 },
                 "dias_por_semana": {
                     "type": "INTEGER",
                     "description": "Días por semana que puede entrenar (3 a 7).",
+                },
+                "fecha_fija": {
+                    "type": "BOOLEAN",
+                    "description": "True si la carrera ya tiene fecha inamovible.",
                 },
             },
             "required": ["distancia", "semanas", "km_semanales_actuales"],
@@ -57,7 +67,7 @@ DECLARACIONES = [
             "properties": {
                 "distancia": {
                     "type": "STRING",
-                    "enum": ["5k", "10k", "21k", "42k"],
+                    "enum": ["1k", "3k", "5k", "10k", "21k", "42k"],
                 },
                 "semanas": {"type": "INTEGER"},
                 "km_semanales_actuales": {"type": "NUMBER"},
@@ -72,6 +82,14 @@ DECLARACIONES = [
                 "marca_reciente_tiempo_s": {
                     "type": "NUMBER",
                     "description": "Tiempo en segundos de esa carrera reciente.",
+                },
+                "fecha_fija": {
+                    "type": "BOOLEAN",
+                    "description": (
+                        "True si la carrera ya tiene fecha y no se puede mover. "
+                        "Entonces el plan se ajusta a ese plazo aunque sea corto, "
+                        "y el objetivo pasa a ser terminar en vez de hacer marca."
+                    ),
                 },
             },
             "required": ["distancia", "semanas", "km_semanales_actuales"],
@@ -174,6 +192,7 @@ def _evaluar_viabilidad(**kw) -> dict:
         semanas=int(kw["semanas"]),
         km_semanales_actuales=float(kw["km_semanales_actuales"]),
         dias_por_semana=int(kw.get("dias_por_semana") or 5),
+        solo_terminar=bool(kw.get("fecha_fija", False)),
     )
     return {
         "veredicto": v.veredicto,
@@ -181,6 +200,14 @@ def _evaluar_viabilidad(**kw) -> dict:
         "km_pico_alcanzable": v.km_pico_alcanzable,
         "km_pico_recomendado": v.km_pico_recomendado,
         "semanas_minimas_sugeridas": v.semanas_minimas_sugeridas,
+        "semanas_recomendadas": v.semanas_recomendadas,
+        # El propio resultado dice qué hacer a continuación. En pruebas el
+        # modelo se quedaba aquí y anunciaba un plan que nunca había generado.
+        "siguiente_paso": (
+            "Esto solo evalúa; NO existe ningún plan todavía. Llama ahora a "
+            "generar_plan con los mismos datos. No digas que el plan está listo "
+            "ni que se ve en pantalla hasta haberlo hecho."
+        ),
     }
 
 
@@ -192,6 +219,7 @@ def _generar_plan(**kw) -> dict:
         dias_por_semana=int(kw.get("dias_por_semana") or 4),
         marca_reciente_distancia_m=kw.get("marca_reciente_distancia_m"),
         marca_reciente_tiempo_s=kw.get("marca_reciente_tiempo_s"),
+        fecha_fija=bool(kw.get("fecha_fija", False)),
     )
     datos = plan.a_dict()
     # El audio no puede recitar 18 semanas: se le da al modelo un resumen
@@ -221,6 +249,17 @@ def _resumir_para_voz(plan: training.Plan) -> str:
         umbral = plan.ritmos["umbral"].formato()
         partes.append(
             f"Tus rodajes fáciles van a {facil} por kilómetro y el umbral a {umbral}."
+        )
+    if plan.objetivo_realista == "terminar_o_caminar":
+        partes.append(
+            "Con este plazo el objetivo honesto es cruzar la meta, alternando "
+            "carrera y caminata si hace falta, no hacer un buen tiempo."
+        )
+    elif plan.objetivo_realista == "terminar":
+        partes.append("El objetivo de este plan es terminar cómodo, no marcar tiempo.")
+    if plan.desde_cero:
+        partes.append(
+            "Como partes de cero, las primeras semanas alternan carrera y caminata."
         )
     if plan.viabilidad.veredicto != "viable":
         partes.append(plan.viabilidad.razon)

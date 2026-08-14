@@ -140,16 +140,34 @@ class ConversacionCoach:
                         buffer.clear()
                         continue
                     audio, buffer = bytes(buffer), bytearray()
-                    turno = asyncio.create_task(self._atender(audio, resumen))
+                    turno = asyncio.create_task(self._atender(resumen, audio=audio))
+
+                elif tipo == "texto":
+                    # Escribir es una intervención como cualquier otra: mismo
+                    # turno, mismo historial, misma respuesta hablada.
+                    if turno and not turno.done():
+                        turno.cancel()
+                    buffer.clear()
+                    turno = asyncio.create_task(self._atender(resumen, texto=valor))
 
         if turno and not turno.done():
             await asyncio.gather(turno, return_exceptions=True)
 
-    async def _atender(self, audio: bytes, resumen: str | None):
-        """Abre una sesión, reproduce el historial y resuelve una intervención."""
+    async def _atender(self, resumen: str | None, audio: bytes | None = None,
+                       texto: str | None = None):
+        """Abre una sesión, reproduce el historial y resuelve una intervención.
+
+        La intervención llega hablada o escrita; a partir de aquí da igual.
+        """
         self.turnos += 1
         numero = self.turnos
-        log.info("turno %d: %.1f s de audio", numero, len(audio) / (TASA_ENTRADA * 2))
+        if texto:
+            log.info("turno %d: texto (%d caracteres)", numero, len(texto))
+            # Lo escrito no vuelve transcrito, así que se refleja en pantalla.
+            await self._enviar({"tipo": "transcripcion", "quien": "corredor",
+                                "texto": texto})
+        else:
+            log.info("turno %d: %.1f s de audio", numero, len(audio) / (TASA_ENTRADA * 2))
         await self._enviar({"tipo": "pensando"})
 
         historial = self._memoria.historial(MAX_TURNOS_HISTORIAL)
@@ -167,12 +185,22 @@ class ConversacionCoach:
                             turns=historial, turn_complete=False
                         )
 
-                    emisor = asyncio.create_task(self._emitir(sesion, audio))
+                    if texto:
+                        dicho.append(texto)
+                        await sesion.send_client_content(
+                            turns={"role": "user", "parts": [{"text": texto}]},
+                            turn_complete=True,
+                        )
+                        emisor = None
+                    else:
+                        emisor = asyncio.create_task(self._emitir(sesion, audio))
+
                     try:
                         await self._recibir(sesion, dicho, respondido)
                     finally:
-                        emisor.cancel()
-                        await asyncio.gather(emisor, return_exceptions=True)
+                        if emisor:
+                            emisor.cancel()
+                            await asyncio.gather(emisor, return_exceptions=True)
 
         except asyncio.CancelledError:
             log.info("turno %d interrumpido por el corredor", numero)

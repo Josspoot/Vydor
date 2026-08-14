@@ -70,8 +70,8 @@ def redactar(plan: dict, sesion: dict, nombre: str | None = None) -> str:
     total = len(plan["semanas_plan"])
 
     if sesion["tipo"] == "descanso":
-        return (f"{saludo} Hoy toca descanso — semana {sesion['semana']} de {total}. "
-                f"El descanso es parte del plan, no una pausa en él.")
+        return (f"{saludo} Hoy toca descanso. El descanso es parte del plan, no "
+                f"una pausa en él.\n\nSemana {sesion['semana']} de {total}.")
 
     titulo = NOMBRE_TIPO.get(sesion["tipo"], sesion["tipo"])
     lineas = [

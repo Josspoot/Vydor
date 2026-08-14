@@ -5,6 +5,8 @@ se habría mandado. Lo que sí importa comprobar es que un código no sirve
 dos veces y que un enlace ajeno no engancha la cuenta de nadie.
 """
 
+from datetime import date, timedelta
+
 import pytest
 
 from app import telegram
@@ -109,7 +111,11 @@ async def test_se_envia_el_entrenamiento_de_hoy(bd, enviados):
     memoria.guardar_plan(plan)
     memoria.actualizar_perfil(nombre="Josué", telegram_chat_id=555)
 
-    assert await telegram.enviar_recordatorios(ruta=bd) == 1
+    # Domingo: día de fondo en cualquier plan, así el test no depende de
+    # cuándo se ejecute.
+    hoy = date.today()
+    domingo = hoy + timedelta(days=6 - hoy.weekday())
+    assert await telegram.enviar_recordatorios(ruta=bd, hoy=domingo) == 1
     chat, texto = enviados[0]
     assert chat == 555
     assert "Josué" in texto

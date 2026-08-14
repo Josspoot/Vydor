@@ -145,6 +145,11 @@ def bd(tmp_path):
     return tmp_path / "recordatorios.db"
 
 
+def _domingo_de_esta_semana() -> date:
+    hoy = date.today()
+    return hoy + timedelta(days=6 - hoy.weekday())
+
+
 def test_sin_plan_guardado_no_hay_recordatorio(bd):
     Memoria("ana", "c1", ruta=bd)
     assert recordatorio_para("ana", date.today(), ruta=bd) is None
@@ -155,8 +160,10 @@ def test_recordatorio_completo_desde_la_memoria(bd, plan):
     memoria.actualizar_perfil(nombre="Josué")
     memoria.guardar_plan(plan)
 
-    # El plan se guardó hoy, así que hoy cae en su semana 1
-    texto = recordatorio_para("josue", date.today(), ruta=bd)
+    # El plan se guarda hoy, así que cualquier día de esta semana es su semana 1.
+    # La fecha se fija a propósito: con date.today() el test pasaba o fallaba
+    # según el día de la semana en que se ejecutara.
+    texto = recordatorio_para("josue", _domingo_de_esta_semana(), ruta=bd)
     assert texto is not None
     assert "Josué" in texto
     assert "Semana 1 de 12" in texto
@@ -167,6 +174,6 @@ def test_una_molestia_abierta_se_pregunta_antes_de_entrenar(bd, plan):
     memoria.guardar_plan(plan)
     memoria.actualizar_perfil(molestia_reciente="rodilla derecha")
 
-    texto = recordatorio_para("josue", date.today(), ruta=bd)
+    texto = recordatorio_para("josue", _domingo_de_esta_semana(), ruta=bd)
     assert "rodilla derecha" in texto
     assert "antes de entrenar" in texto

@@ -19,13 +19,15 @@ from typing import Literal
 # --------------------------------------------------------------------------
 
 DISTANCIAS = {
+    "1k": 1_000,
+    "3k": 3_000,
     "5k": 5_000,
     "10k": 10_000,
     "21k": 21_097,
     "42k": 42_195,
 }
 
-TipoDistancia = Literal["5k", "10k", "21k", "42k"]
+TipoDistancia = Literal["1k", "3k", "5k", "10k", "21k", "42k"]
 
 
 # --------------------------------------------------------------------------
@@ -174,18 +176,29 @@ FRACCION_FONDO_POR_DIAS = {3: 0.45, 4: 0.38, 5: 0.34, 6: 0.32, 7: 0.30}
 # "rodajes suaves" de 18 km, que no son suaves ni sostenibles.
 KM_MAX_PROMEDIO_POR_DIA = 14
 
+# Quien parte de cero no puede progresar con un porcentaje: el 10% de nada es
+# nada. Arranca en un volumen bajo de caminata-carrera, que es como se empieza
+# de verdad, y a partir de ahí ya aplica la progresión normal.
+KM_ARRANQUE_DESDE_CERO = 6
+UMBRAL_PRINCIPIANTE = 10        # por debajo, el plan empieza caminando
+
 # Volumen semanal pico recomendado y mínimo viable, en km
 # semanas_max no es una regla de seguridad sino de sentido: un bloque de
 # preparación tiene una duración útil, y estirarlo no mejora nada. El tiempo
 # sobrante se emplea en construir base, no en alargar el plan.
 PERFIL_DISTANCIA = {
-    "5k":  {"km_min": 20, "km_pico": 45, "fondo_max": 12, "semanas_taper": 1,
+    # Metas de iniciación: para muchos, correr 1 km seguido ya es la carrera.
+    "1k":  {"km_min": 6,  "km_min_terminar": 4,  "km_pico": 18, "fondo_max": 5,  "semanas_taper": 1,
+            "semanas_min": 4,  "semanas_max": 10},
+    "3k":  {"km_min": 12, "km_min_terminar": 8,  "km_pico": 30, "fondo_max": 8,  "semanas_taper": 1,
+            "semanas_min": 5,  "semanas_max": 12},
+    "5k":  {"km_min": 20, "km_min_terminar": 13, "km_pico": 45, "fondo_max": 12, "semanas_taper": 1,
             "semanas_min": 6,  "semanas_max": 16},
-    "10k": {"km_min": 25, "km_pico": 55, "fondo_max": 16, "semanas_taper": 1,
+    "10k": {"km_min": 25, "km_min_terminar": 18, "km_pico": 55, "fondo_max": 16, "semanas_taper": 1,
             "semanas_min": 8,  "semanas_max": 20},
-    "21k": {"km_min": 30, "km_pico": 70, "fondo_max": 22, "semanas_taper": 2,
+    "21k": {"km_min": 30, "km_min_terminar": 24, "km_pico": 70, "fondo_max": 22, "semanas_taper": 2,
             "semanas_min": 10, "semanas_max": 24},
-    "42k": {"km_min": 40, "km_pico": 90, "fondo_max": 32, "semanas_taper": 3,
+    "42k": {"km_min": 40, "km_min_terminar": 34, "km_pico": 90, "fondo_max": 32, "semanas_taper": 3,
             "semanas_min": 16, "semanas_max": 30},
 }
 
@@ -205,6 +218,7 @@ def evaluar_viabilidad(
     semanas: int,
     km_semanales_actuales: float,
     dias_por_semana: int = 5,
+    solo_terminar: bool = False,
 ) -> Viabilidad:
     """¿Le da tiempo a este corredor de prepararse sin romperse?
 
@@ -213,8 +227,17 @@ def evaluar_viabilidad(
     """
     perfil = PERFIL_DISTANCIA[distancia]
 
-    if km_semanales_actuales <= 0:
-        raise ValueError("km_semanales_actuales debe ser positivo")
+    if km_semanales_actuales < 0:
+        raise ValueError("km_semanales_actuales no puede ser negativo")
+
+    # Cero es una respuesta legítima y frecuente: quien no corre nada todavía
+    # es justo quien más necesita un plan.
+    # Quien parte de casi cero aspira a terminar, no a marca, y para eso hace
+    # falta bastante menos volumen. Exigirle el mínimo de competición lo
+    # dejaría fuera de un objetivo que sí está a su alcance.
+    solo_terminar = solo_terminar or km_semanales_actuales < UMBRAL_PRINCIPIANTE
+    km_semanales_actuales = max(km_semanales_actuales, KM_ARRANQUE_DESDE_CERO)
+    km_minimo = perfil["km_min_terminar"] if solo_terminar else perfil["km_min"]
 
     semanas_construccion = max(1, semanas - perfil["semanas_taper"])
 
@@ -261,12 +284,12 @@ def evaluar_viabilidad(
             semanas_recomendadas=semanas,
         )
 
-    if pico_alcanzable < perfil["km_min"]:
+    if pico_alcanzable < km_minimo:
         return Viabilidad(
             veredicto="no_recomendado",
             razon=(
                 f"Partiendo de {km_semanales_actuales:g} km/semana no se llega "
-                f"al mínimo de {perfil['km_min']} km/semana para {distancia} "
+                f"al mínimo de {km_minimo:g} km/semana para {distancia} "
                 f"en {semanas} semanas sin saltarse el +10% semanal."
             ),
             km_pico_alcanzable=round(pico_alcanzable, 1),
@@ -366,6 +389,9 @@ class Plan:
     viabilidad: Viabilidad
     ritmos: dict[str, RangoRitmo]
     tiempo_objetivo_s: float | None
+    # Qué se puede aspirar de verdad con este plan, que no siempre es una marca.
+    objetivo_realista: Literal["marca", "terminar", "terminar_o_caminar"] = "marca"
+    desde_cero: bool = False
     semanas_plan: list[SemanaPlan] = field(default_factory=list)
 
     def a_dict(self) -> dict:
@@ -379,6 +405,7 @@ def generar_plan(
     dias_por_semana: int = 4,
     marca_reciente_distancia_m: float | None = None,
     marca_reciente_tiempo_s: float | None = None,
+    fecha_fija: bool = False,
 ) -> Plan:
     """Genera un plan semana a semana respetando las reglas de carga.
 
@@ -387,6 +414,8 @@ def generar_plan(
     """
     if distancia not in PERFIL_DISTANCIA:
         raise ValueError(f"distancia debe ser una de {list(PERFIL_DISTANCIA)}")
+    if km_semanales_actuales < 0:
+        raise ValueError("km_semanales_actuales no puede ser negativo")
     if not 3 <= dias_por_semana <= 7:
         raise ValueError("dias_por_semana debe estar entre 3 y 7")
     if semanas < 1:
@@ -394,11 +423,26 @@ def generar_plan(
 
     perfil = PERFIL_DISTANCIA[distancia]
     viabilidad = evaluar_viabilidad(
-        distancia, semanas, km_semanales_actuales, dias_por_semana
+        distancia, semanas, km_semanales_actuales, dias_por_semana,
+        solo_terminar=fecha_fija,
     )
-    # Un bloque más largo de la cuenta no se genera: se recorta a lo útil y la
-    # viabilidad ya explica por qué.
+    # Quien no corre nada arranca caminando; el plan lo dice en las sesiones.
+    desde_cero = km_semanales_actuales < UMBRAL_PRINCIPIANTE
+    km_semanales_actuales = max(km_semanales_actuales, KM_ARRANQUE_DESDE_CERO)
+
+    # Un bloque más largo de la cuenta no se genera: se recorta a lo útil.
     semanas = min(semanas, perfil["semanas_max"])
+    # Con fecha fija el plazo no se toca aunque sea corto: la carrera es ese
+    # día y negarse no la mueve. Lo que cambia es a qué se puede aspirar.
+    if not fecha_fija:
+        semanas = max(semanas, 1)
+
+    if viabilidad.veredicto == "no_recomendado":
+        objetivo_realista = "terminar_o_caminar"
+    elif viabilidad.veredicto == "ajustado" or desde_cero:
+        objetivo_realista = "terminar"
+    else:
+        objetivo_realista = "marca"
 
     vdot = None
     ritmos: dict[str, RangoRitmo] = {}
@@ -435,7 +479,8 @@ def generar_plan(
             fase = "base" if numero <= semanas_construccion / 3 else "construccion"
 
         plan_semanas.append(
-            _construir_semana(numero, fase, km, distancia, dias_por_semana, perfil)
+            _construir_semana(numero, fase, km, distancia, dias_por_semana, perfil,
+                              desde_cero=desde_cero, semanas_totales=semanas)
         )
 
     # Afinamiento: bajar volumen manteniendo algo de intensidad
@@ -451,6 +496,8 @@ def generar_plan(
                 distancia,
                 dias_por_semana,
                 perfil,
+                desde_cero=desde_cero,
+                semanas_totales=semanas,
                 semana_de_carrera=es_ultima,
             )
         )
@@ -463,6 +510,8 @@ def generar_plan(
         viabilidad=viabilidad,
         ritmos=ritmos,
         tiempo_objetivo_s=round(tiempo_objetivo) if tiempo_objetivo else None,
+        objetivo_realista=objetivo_realista,
+        desde_cero=desde_cero,
         semanas_plan=plan_semanas,
     )
 
@@ -474,6 +523,8 @@ def _construir_semana(
     distancia: TipoDistancia,
     dias: int,
     perfil: dict,
+    desde_cero: bool = False,
+    semanas_totales: int = 1,
     semana_de_carrera: bool = False,
 ) -> SemanaPlan:
     """Reparte el volumen semanal en sesiones concretas respetando 80/20."""
@@ -568,13 +619,29 @@ def _construir_semana(
         else:
             sesiones.append(
                 Sesion(dia, "facil", km_por_facil, "facil",
-                       "Rodaje suave. Termina sintiendo que podrías seguir.")
+                       _texto_rodaje(desde_cero, numero, semanas_totales))
             )
 
     # El total es lo que realmente suman las sesiones, no un número aparte:
     # así el plan nunca promete un volumen que su propio calendario no contiene.
     return SemanaPlan(
         numero, fase, round(sum(s.km for s in sesiones), 1), km_fondo, sesiones
+    )
+
+
+def _texto_rodaje(desde_cero: bool, numero: int, totales: int) -> str:
+    """Descripción del rodaje suave, que cambia si se empieza de cero.
+
+    Nadie que no corre arranca trotando media hora seguida: se alterna con
+    caminata y se va estirando el tramo corrido semana a semana.
+    """
+    if not desde_cero or numero > max(3, totales // 3):
+        return "Rodaje suave. Termina sintiendo que podrías seguir."
+
+    minutos = min(1 + numero, 5)
+    return (
+        f"Alterna {minutos} min corriendo y 2 min caminando hasta completar la "
+        f"distancia. Corriendo debes poder hablar; si no, ve más lento."
     )
 
 
@@ -586,11 +653,31 @@ def _calidad_para(distancia: TipoDistancia, fase: str) -> list[tuple]:
     contradiga la prescripción.
     """
     def intervalos(km: float) -> str:
-        # ~45% de la sesión son series; el resto calentamiento y enfriamiento
-        series = max(4, round(km * 0.45 / 0.8))
+        """Series que caben de verdad en los km asignados.
+
+        Con poco volumen no se pueden prescribir 4 × 800 m: son 3.2 km que la
+        sesión no tiene. Se baja a repeticiones de 400 m, y si ni así entran,
+        deja de ser sesión de series.
+        """
+        km_series = km * 0.45          # el resto es calentar y enfriar
+        if km_series >= 3.2:
+            return (
+                f"{round(km_series / 0.8)} × 800 m a ritmo de intervalo con 2 min "
+                f"de trote entre series. Incluye calentamiento y enfriamiento."
+            )
+        if km_series >= 1.6:
+            return (
+                f"{round(km_series / 0.4)} × 400 m algo más vivos, con 2 min de "
+                f"trote entre repeticiones. Calienta y enfría suave."
+            )
+        if km_series >= 0.8:
+            return (
+                f"{round(km_series / 0.2)} × 200 m algo más vivos, caminando 2 min "
+                f"entre repeticiones. El resto de la sesión, suave."
+            )
         return (
-            f"{series} × 800 m a ritmo de intervalo con 2 min de trote entre "
-            f"series. Incluye 2 km de calentamiento y 1.5 km de enfriamiento."
+            f"{km:g} km suaves terminando con 4 rectas de 100 m algo más rápidas. "
+            f"Todavía no hay volumen para series de verdad."
         )
 
     def tempo(km: float, bloques: int) -> str:
@@ -612,6 +699,14 @@ def _calidad_para(distancia: TipoDistancia, fase: str) -> list[tuple]:
             f"el resto suave."
         )
 
+    if distancia in ("1k", "3k"):
+        # En iniciación la "calidad" es aprender a correr seguido, no jadear.
+        return [
+            ("facil", "facil",
+             lambda km: f"{km:g} km continuos y cómodos. El objetivo es no parar, "
+                        f"no ir rápido."),
+            ("intervalos", "intervalo", intervalos),
+        ]
     if distancia in ("5k", "10k"):
         return [
             ("intervalos", "intervalo", intervalos),

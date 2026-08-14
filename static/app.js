@@ -19,7 +19,7 @@ const S = {
 };
 
 let ws, ctxEntrada, ctxSalida, micro, worklet;
-let activo = false, hayVoz = false, estadoTurno = "escuchando";
+let activo = false, micActivo = false, hayVoz = false, estadoTurno = "escuchando";
 let siguienteInicio = 0, finReproduccion = 0, fuentes = [], medidor = null;
 let ultimoQuien = null;
 
@@ -488,6 +488,29 @@ function exportarPDF() {
   print();
 }
 
+/* ========================================================= texto escrito */
+
+/** Escribir vale igual que hablar: mismo turno y misma respuesta en voz. */
+async function enviarTexto(ev) {
+  ev.preventDefault();
+  const campo = $("#entradaTexto");
+  const texto = campo.value.trim();
+  if (!texto) return;
+
+  // Si todavía no hay conexión se abre sola: quien escribe no tiene por qué
+  // pulsar antes el botón de hablar.
+  try {
+    await conectar();
+  } catch (e) {
+    marcar(e.message, "error");
+    return;
+  }
+  if (ws?.readyState !== WebSocket.OPEN) return;
+
+  ws.send(JSON.stringify({ tipo: "texto", texto }));
+  campo.value = "";
+}
+
 /* ============================================== voz, audio y conexión */
 
 function coachOcupado() {
@@ -503,17 +526,18 @@ function marcar(texto, clase = "") {
 function arrancarMedidor() {
   medidor = setInterval(() => {
     if (!activo) return;
-    if (estadoTurno === "pensando") marcar("Vydor está pensando…", "activo");
+    const ocupado = estadoTurno === "pensando";
+    $("#enviarTexto").disabled = ocupado;
+    if (ocupado) marcar("Vydor está pensando…", "activo");
     else if (coachOcupado()) marcar("Vydor está hablando…", "activo");
     else if (hayVoz) marcar("te escucho…", "activo");
-    else marcar("listo, habla cuando quieras");
+    else marcar(micActivo ? "listo, habla cuando quieras" : "listo, escribe o pulsa hablar");
   }, 500);
 }
 
-async function iniciar() {
-  const stream = await navigator.mediaDevices.getUserMedia({
-    audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
-  });
+/** Abre la conexión y la salida de audio. No toca el micrófono. */
+async function conectar() {
+  if (ws?.readyState === WebSocket.OPEN) return;
 
   const proto = location.protocol === "https:" ? "wss" : "ws";
   const charla = S.conversacion ? `&conversacion=${S.conversacion}` : "";
@@ -524,6 +548,23 @@ async function iniciar() {
   ws.onerror = () => marcar("error de conexión", "error");
   ws.onclose = () => { detener(); cargarHistorial(); };
   await new Promise((r) => (ws.onopen = r));
+
+  ctxSalida = new AudioContext({ sampleRate: 24000 });
+  siguienteInicio = finReproduccion = 0;
+  activo = true;
+  marcar("conectado", "activo");
+  arrancarMedidor();
+  cambiarVista("chat");
+}
+
+/** Añade la captura de micrófono a una conexión ya abierta. */
+async function iniciar() {
+  await conectar();
+  // El permiso de micrófono solo se pide aquí: quien prefiere escribir nunca
+  // llega a esta función y por tanto el navegador no se lo pregunta.
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+  });
 
   // Tasa nativa del sistema: el worklet remuestrea a 16 kHz. Forzar el
   // contexto a 16 kHz falla en algunos navegadores según el hardware.
@@ -557,19 +598,15 @@ async function iniciar() {
   mudo.gain.value = 0;
   worklet.connect(mudo).connect(ctxEntrada.destination);
 
-  ctxSalida = new AudioContext({ sampleRate: 24000 });
-  siguienteInicio = finReproduccion = 0;
-  activo = true;
+  micActivo = true;
   $("#boton").textContent = "Terminar";
   $("#boton").classList.add("detener");
   marcar("listo, habla cuando quieras", "activo");
-  arrancarMedidor();
-  cambiarVista("chat");
 }
 
 function detener() {
   if (!activo) return;
-  activo = false;
+  activo = micActivo = false;
   clearInterval(medidor);
   ws?.readyState === WebSocket.OPEN && ws.close();
   micro?.mediaStream?.getTracks().forEach((t) => t.stop());
@@ -669,9 +706,10 @@ function reproducir(buffer) {
   }
 
   $("#boton").onclick = () =>
-    activo ? detener() : iniciar().catch((e) => marcar(e.message, "error"));
+    micActivo ? detener() : iniciar().catch((e) => marcar(e.message, "error"));
   $$(".pestana").forEach((b) => (b.onclick = () => cambiarVista(b.dataset.vista)));
   $("#pdf").onclick = exportarPDF;
+  $("#formTexto").onsubmit = enviarTexto;
   $("#abrirHistorial").onclick = () => document.body.classList.toggle("historialAbierto");
 
   cargarHistorial();

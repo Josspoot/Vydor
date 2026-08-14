@@ -347,3 +347,100 @@ def test_dentro_del_rango_se_respetan_las_semanas_pedidas(distancia):
 def test_el_maximo_siempre_deja_sitio_por_encima_del_minimo():
     for distancia, perfil in t.PERFIL_DISTANCIA.items():
         assert perfil["semanas_max"] > perfil["semanas_min"], distancia
+
+
+# --------------------------------------------------------------------------
+# Empezar de cero y metas pequeñas
+# --------------------------------------------------------------------------
+
+def test_cero_kilometros_es_un_punto_de_partida_valido():
+    """Quien no corre nada es justo quien más necesita un plan."""
+    plan = t.generar_plan("5k", semanas=12, km_semanales_actuales=0, dias_por_semana=3)
+    assert plan.desde_cero is True
+    assert len(plan.semanas_plan) == 12
+    assert plan.semanas_plan[0].km_total > 0
+
+
+def test_los_kilometros_negativos_si_se_rechazan():
+    with pytest.raises(ValueError):
+        t.generar_plan("5k", semanas=12, km_semanales_actuales=-5)
+    with pytest.raises(ValueError):
+        t.evaluar_viabilidad("5k", semanas=12, km_semanales_actuales=-1)
+
+
+def test_quien_empieza_de_cero_arranca_caminando():
+    plan = t.generar_plan("5k", semanas=12, km_semanales_actuales=0, dias_por_semana=3)
+    primeros = [s.detalle for s in plan.semanas_plan[0].sesiones if s.tipo == "facil"]
+    assert any("Alterna" in d and "caminando" in d for d in primeros)
+
+
+def test_el_caminar_desaparece_al_avanzar_el_plan():
+    plan = t.generar_plan("5k", semanas=12, km_semanales_actuales=0, dias_por_semana=3)
+    ultimos = [s.detalle for s in plan.semanas_plan[-2].sesiones if s.tipo == "facil"]
+    assert all("Alterna" not in d for d in ultimos)
+
+
+def test_quien_ya_corre_no_recibe_rodajes_de_caminata():
+    """Caminar entre series vale para cualquiera; alternar en el rodaje no."""
+    plan = t.generar_plan("10k", semanas=12, km_semanales_actuales=30, dias_por_semana=4)
+    assert plan.desde_cero is False
+    for semana in plan.semanas_plan:
+        for sesion in semana.sesiones:
+            if sesion.tipo == "facil":
+                assert "Alterna" not in sesion.detalle
+
+
+@pytest.mark.parametrize("distancia", ["1k", "3k"])
+def test_las_metas_de_iniciacion_generan_plan(distancia):
+    plan = t.generar_plan(distancia, semanas=6, km_semanales_actuales=0, dias_por_semana=3)
+    assert len(plan.semanas_plan) == 6
+    assert plan.viabilidad.veredicto != "no_recomendado"
+
+
+def test_un_couch_to_5k_de_doce_semanas_no_se_rechaza():
+    """Es el plazo clásico para pasar de cero a 5K; rechazarlo sería absurdo."""
+    v = t.evaluar_viabilidad("5k", semanas=12, km_semanales_actuales=0, dias_por_semana=3)
+    assert v.veredicto != "no_recomendado"
+
+
+# --------------------------------------------------------------------------
+# Fecha fija: el plazo manda, pero se dice la verdad
+# --------------------------------------------------------------------------
+
+def test_con_fecha_fija_se_respeta_el_plazo_aunque_sea_corto():
+    plan = t.generar_plan("21k", semanas=6, km_semanales_actuales=15,
+                          dias_por_semana=4, fecha_fija=True)
+    assert len(plan.semanas_plan) == 6
+    assert plan.viabilidad.veredicto == "no_recomendado"
+    assert plan.objetivo_realista == "terminar_o_caminar"
+
+
+def test_el_objetivo_es_marca_solo_cuando_de_verdad_da_tiempo():
+    holgado = t.generar_plan("10k", semanas=14, km_semanales_actuales=35, dias_por_semana=5)
+    assert holgado.objetivo_realista == "marca"
+
+    justo = t.generar_plan("42k", semanas=17, km_semanales_actuales=20, dias_por_semana=4)
+    assert justo.objetivo_realista in ("terminar", "terminar_o_caminar")
+
+
+# --------------------------------------------------------------------------
+# El texto de una sesión nunca puede pedir más de lo que la sesión tiene
+# --------------------------------------------------------------------------
+
+@pytest.mark.parametrize("distancia", ["1k", "3k", "5k", "10k", "21k", "42k"])
+@pytest.mark.parametrize("km_iniciales", [0, 5, 25])
+def test_las_series_caben_en_los_km_de_su_sesion(distancia, km_iniciales):
+    """Un '4 × 800 m' dentro de una sesión de 0.7 km es imposible de hacer."""
+    import re
+    plan = t.generar_plan(distancia, semanas=8, km_semanales_actuales=km_iniciales,
+                          dias_por_semana=4)
+    for semana in plan.semanas_plan:
+        for sesion in semana.sesiones:
+            series = re.search(r"(\d+) × (\d+) m", sesion.detalle)
+            if not series:
+                continue
+            km_pedidos = int(series.group(1)) * int(series.group(2)) / 1000
+            assert km_pedidos <= sesion.km, (
+                f"{distancia}/{km_iniciales}: sesión de {sesion.km} km pide "
+                f"{km_pedidos} km en series"
+            )

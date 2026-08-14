@@ -21,11 +21,23 @@ Aquí el modelo conversa y extrae datos; todos los números salen de
 | Fondo máximo | 30–45% del volumen según días | Un fondo desproporcionado lesiona |
 | Distribución | ~80% fácil / 20% calidad | Entrenamiento polarizado |
 | Techo por día disponible | 14 km/día promedio | Evita "rodajes suaves" de 18 km |
+| Duración máxima del bloque | 10–30 semanas según distancia | Estirarlo acumula cansancio, no forma |
 
 Los ritmos salen de **VDOT (Daniels)** calculado sobre una marca real, y la
 predicción entre distancias usa **VDOT + Riegel**. Los tests comparan contra las
 tablas publicadas, no contra la salida del propio código: si la implementación
 se desvía de la literatura, fallan.
+
+**Se puede empezar de cero.** Cero kilómetros a la semana es un punto de
+partida válido y frecuente: las primeras semanas alternan carrera y caminata, y
+el mínimo de volumen exigido baja cuando el objetivo es terminar en vez de
+marcar tiempo. También hay metas de iniciación —1K y 3K— porque para mucha
+gente correr un kilómetro seguido *es* la carrera.
+
+**Con fecha fija, el plazo manda.** Si la carrera ya tiene día y no se puede
+mover, el plan se arma para ese plazo aunque sea corto: negarse no mueve la
+carrera. Lo que cambia es a qué se aspira, y el coach lo dice una vez con
+franqueza —terminar, caminando tramos si hace falta— sin repetirlo en cada turno.
 
 **Decir "no" es una función de primera clase.** `evaluar_viabilidad()` rechaza
 objetivos peligrosos ("maratón en 8 semanas corriendo 10 km") y devuelve la
@@ -92,7 +104,7 @@ La clave se saca gratis en [AI Studio](https://aistudio.google.com/apikey) y
 ## Tests
 
 ```bash
-.venv/bin/python -m pytest -q     # 154 tests
+.venv/bin/python -m pytest -q     # 203 tests
 ```
 
 Cubren la matemática de VDOT contra tablas, las reglas de carga sobre planes
@@ -130,7 +142,9 @@ compartido no drene la cuota.
 
 Tres vistas sobre los mismos datos, más un historial lateral:
 
-- **Chat** — la conversación. Cada charla se guarda y se puede retomar días
+- **Chat** — la conversación, por voz o **escribiendo**: quien prefiere no
+  hablar tiene un campo de texto, y el permiso de micrófono solo se pide si se
+  pulsa el botón de hablar. Cada charla se guarda y se puede retomar días
   después: su historial vuelve a entrar en la sesión y el coach sigue el hilo.
 - **Plan** — cifras del objetivo, veredicto de viabilidad, zonas de ritmo, la
   forma del bloque en una gráfica, y el desglose de los siete días de cualquier

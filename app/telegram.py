@@ -163,7 +163,7 @@ async def _atender_mensaje(mensaje: dict, ruta=None) -> None:
 # Recordatorio diario
 # --------------------------------------------------------------------------
 
-async def enviar_recordatorios(ruta=None, simular: bool = False) -> int:
+async def enviar_recordatorios(ruta=None, simular: bool = False, hoy=None) -> int:
     """Manda a cada corredor vinculado su entrenamiento de hoy.
 
     Con `simular` no envía nada: imprime lo que saldría. Útil para revisar la
@@ -171,7 +171,7 @@ async def enviar_recordatorios(ruta=None, simular: bool = False) -> int:
     """
     enviados = 0
     for corredor in corredores_notificables(ruta):
-        texto = recordatorio_para(corredor, ruta=ruta)
+        texto = recordatorio_para(corredor, hoy=hoy, ruta=ruta)
         if not texto:
             continue
         chat = Memoria(corredor, "recordatorio", ruta=ruta).perfil().get("telegram_chat_id")
