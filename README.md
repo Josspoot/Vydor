@@ -104,7 +104,7 @@ La clave se saca gratis en [AI Studio](https://aistudio.google.com/apikey) y
 ## Tests
 
 ```bash
-.venv/bin/python -m pytest -q     # 204 tests
+.venv/bin/python -m pytest -q     # 213 tests
 ```
 
 Cubren la matemática de VDOT contra tablas, las reglas de carga sobre planes
@@ -132,7 +132,8 @@ compartido no drene la cuota.
 - [x] Triaje de síntomas y banderas rojas
 - [x] Puente de voz bidireccional con function calling
 - [x] Cliente web (captura 16 kHz, reproducción 24 kHz, barge-in)
-- [x] Memoria: historial de la conversación y perfil entre conversaciones
+- [x] Memoria por conversación: retomar una charla la recuerda entera, abrir
+      una nueva empieza limpia
 - [x] Recordatorios proactivos por Telegram
 - [x] Historial navegable: varias charlas y varios planes a la vez
 - [x] Vistas de chat, plan semanal y calendario mensual
@@ -156,12 +157,23 @@ Tres vistas sobre los mismos datos, más un historial lateral:
 Un corredor puede tener **varios planes a la vez** —preparar un 10K y pensar ya
 en la media— y el historial los lista todos.
 
-Cada charla es una meta, y eso vale también para lo que el coach recuerda: al
-abrir una conversación, la memoria que entra en la sesión describe *su* plan.
-Los de otras charlas se mencionan como lo que son, metas aparte, para que el
-coach pueda preguntar de cuál se habla en vez de darlo por hecho. Solo lo que
-es de la persona y no del objetivo —el nombre, una molestia abierta, el VDOT—
-viaja entre conversaciones.
+Cada charla es una meta, y eso vale también para lo que el coach recuerda: la
+memoria que entra en la sesión describe *su* plan y nada más. **Una
+conversación nueva empieza limpia**, porque quien abre una es casi siempre
+porque quiere hablar de otra cosa, y arrancar preguntando por lo que quedó
+pendiente en otra charla no viene al caso. Lo anterior no se pierde: sigue en
+su conversación, y retomarla la trae entera.
+
+Solo cruzan esa frontera dos cosas, por ser del corredor y no del tema: cómo se
+llama y una molestia que dejó abierta. La segunda es de seguridad —nadie
+debería recibir una sesión de series por haber abierto una pestaña nueva con la
+rodilla a medias—.
+
+Al revés también: retomar una charla no es solo recordar de qué iba, es saber
+**por dónde va**. El resumen sitúa al corredor en su plan con el mismo cálculo
+que decide el recordatorio diario —«va por la semana 4 de 12, y hoy miércoles
+le toca series rápidas de 2.5 km»— y, si el plan ya terminó, el coach pregunta
+por la carrera antes de proponer nada nuevo.
 
 ### PDF
 

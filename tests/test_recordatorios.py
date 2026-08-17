@@ -14,14 +14,8 @@ from app.recordatorios import (
 from app.tools import esquemas
 
 
-@pytest.fixture
-def plan():
-    return esquemas.ejecutar("generar_plan", {
-        "distancia": "10k", "semanas": 12, "km_semanales_actuales": 25,
-        "dias_por_semana": 4,
-        "marca_reciente_distancia_m": 10000, "marca_reciente_tiempo_s": 3000,
-    })
-
+# El fixture `plan` vive en conftest.py: lo comparten estos tests y los de
+# memoria, que también necesitan situar al corredor dentro de un plan real.
 
 # --------------------------------------------------------------------------
 # En qué semana del plan estamos

@@ -1,12 +1,12 @@
 """Tests de la memoria.
 
 Importa doblemente: el historial es lo que mantiene el hilo dentro de una
-conversación (una sesión de Gemini por turno) y el perfil es lo que la
-mantiene entre conversaciones.
+conversación (una sesión de Gemini por turno), y el alcance de esa memoria es
+lo que decide qué sabe el coach al abrir cada charla.
 """
 
 import json
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 
@@ -170,8 +170,8 @@ def test_dos_metas_a_la_vez_no_se_pisan(bd):
     resumen = de_vuelta.resumen_para_prompt()
     assert "10k" in resumen
     assert "12 semanas" in resumen
-    # El 21K existe, pero nombrado como lo que es: otra meta.
-    assert "otras conversaciones" in resumen.lower()
+    # Y del 21K no se dice nada: cada charla habla de lo suyo.
+    assert "21k" not in resumen
 
 
 def test_el_plan_activo_manda_los_recordatorios(bd):
@@ -224,14 +224,69 @@ def test_el_resumen_recuerda_una_molestia(memoria):
     assert "rodilla derecha" in memoria.resumen_para_prompt()
 
 
-def test_el_resumen_recoge_la_charla_anterior(bd):
+def test_una_charla_nueva_no_arrastra_la_anterior(bd):
+    """Abrir una conversación nueva es querer hablar de otra cosa.
+
+    El coach abría preguntando por lo que quedó pendiente en otra charla, que
+    es justo lo que no viene al caso cuando empiezas de nuevo.
+    """
     vieja = Memoria("corredor-1", "charla-1", ruta=bd)
     vieja.guardar_turno("model", "Nos vemos, avísame cómo salió el fondo del domingo.")
+    vieja.guardar_plan({"distancia": "42k", "semanas": 18})
 
     nueva = Memoria("corredor-1", "charla-2", ruta=bd)
-    resumen = nueva.resumen_para_prompt()
-    assert "fondo del domingo" in resumen
-    assert "hoy" in resumen
+    assert nueva.resumen_para_prompt() is None
+
+
+def test_la_charla_nueva_si_conserva_nombre_y_molestia(bd):
+    """Lo que es del corredor y no del tema sí cruza: identidad y lesión.
+
+    La molestia es de seguridad: nadie debería recibir series por haber
+    abierto una pestaña nueva con la rodilla a medias.
+    """
+    vieja = Memoria("corredor-1", "charla-1", ruta=bd)
+    vieja.actualizar_perfil(nombre="Josué", molestia_reciente="rodilla derecha")
+    vieja.guardar_plan({"distancia": "42k", "semanas": 18})
+
+    resumen = Memoria("corredor-1", "charla-2", ruta=bd).resumen_para_prompt()
+    assert "Josué" in resumen
+    assert "rodilla derecha" in resumen
+    assert "42k" not in resumen        # la meta de la otra charla, no
+
+
+def test_retomar_una_charla_la_recuerda_entera(bd):
+    """Lo de antes no se pierde: sigue en su conversación."""
+    charla = Memoria("corredor-1", "charla-1", ruta=bd)
+    charla.guardar_plan({"distancia": "21k", "semanas": 16, "dias_por_semana": 4})
+
+    de_vuelta = Memoria("corredor-1", "charla-1", ruta=bd)
+    assert "21k" in de_vuelta.resumen_para_prompt()
+
+
+def test_retomar_una_charla_situa_por_donde_va(bd, plan):
+    """Saber cuál es el plan no basta: hay que saber en qué semana va.
+
+    Si no, retomar una charla dos semanas después empieza por preguntarle algo
+    que el motor ya sabe calcular.
+    """
+    charla = Memoria("corredor-1", "charla-1", ruta=bd)
+    charla.guardar_plan(plan)
+
+    # Dos semanas después de generarlo. La fecha se pasa a propósito: con
+    # date.today() el test pasaría o fallaría según el día en que se ejecute.
+    quince_dias = date.today() + timedelta(days=14)
+    resumen = charla.resumen_para_prompt(hoy=quince_dias)
+    assert "semana 3 de 12" in resumen
+
+
+def test_si_el_plan_ya_termino_pregunta_por_la_carrera(bd, plan):
+    charla = Memoria("corredor-1", "charla-1", ruta=bd)
+    charla.guardar_plan(plan)
+
+    despues = date.today() + timedelta(days=7 * 13)
+    resumen = charla.resumen_para_prompt(hoy=despues)
+    assert "terminó" in resumen
+    assert "cómo le fue" in resumen
 
 
 def test_lo_guardado_ahora_cuenta_como_hoy_a_cualquier_hora():

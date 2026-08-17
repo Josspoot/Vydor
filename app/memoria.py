@@ -85,13 +85,6 @@ def _fecha_local(marca: str) -> date:
     return momento.astimezone().date()
 
 
-def _enumerar(cosas: list[str]) -> str:
-    """"10K", "10K y 21K", "10K, 21K y 42K" — para que el prompt suene a prosa."""
-    if len(cosas) == 1:
-        return cosas[0]
-    return ", ".join(cosas[:-1]) + " y " + cosas[-1]
-
-
 @contextmanager
 def conectar(ruta: Path | str | None = None):
     con = sqlite3.connect(ruta or RUTA_BD)
@@ -338,13 +331,20 @@ class Memoria:
 
     def plan_de_esta_conversacion(self) -> dict | None:
         """El plan de la charla abierta, que es del que se está hablando."""
+        con_fecha = self.plan_de_esta_conversacion_con_fecha()
+        return con_fecha[0] if con_fecha else None
+
+    def plan_de_esta_conversacion_con_fecha(self) -> tuple[dict, date] | None:
         with conectar(self.ruta) as con:
             fila = con.execute(
-                "SELECT plan FROM planes WHERE corredor_id = ? AND conversacion = ? "
+                "SELECT plan, creado FROM planes "
+                "WHERE corredor_id = ? AND conversacion = ? "
                 "ORDER BY id DESC LIMIT 1",
                 (self.corredor_id, self.conversacion),
             ).fetchone()
-        return json.loads(fila["plan"]) if fila else None
+        if not fila:
+            return None
+        return json.loads(fila["plan"]), _fecha_local(fila["creado"])
 
     def _fila_del_plan_activo(self):
         """El plan del que salen los recordatorios.
@@ -386,75 +386,80 @@ class Memoria:
 
     # ------------------------------------------------------------- resúmenes
 
-    def resumen_para_prompt(self) -> str | None:
-        """Lo que el coach debe recordar de este corredor al empezar a hablar.
+    def resumen_para_prompt(self, hoy: date | None = None) -> str | None:
+        """Lo que el coach sabe del corredor al empezar a hablar en esta charla.
+
+        Una conversación nueva arranca limpia. Sacar aquí lo que se habló en
+        otra hacía que el coach abriera preguntando por una meta que ya no
+        viene al caso, y quien abre una charla nueva casi siempre es porque
+        quiere hablar de otra cosa. Lo de antes no se pierde: sigue en su
+        conversación, y retomarla la trae entera.
+
+        Solo cruzan la frontera dos cosas, porque son del corredor y no del
+        tema: cómo se llama y una molestia que dejó abierta. La segunda es de
+        seguridad —no se le manda una sesión de series a quien arrastra una
+        lesión sin cerrar solo porque abrió una pestaña nueva—.
 
         Va en la instrucción de sistema, así que se escribe en prosa corta:
         una lista de campos haría que el modelo la recite como un expediente.
         """
         perfil = self.perfil()
-        ultima = self._ultima_charla()
-        plan = self.plan_de_esta_conversacion()
-        otras = self._otras_metas()
-        if not perfil and not ultima and not plan:
-            return None
+        guardado = self.plan_de_esta_conversacion_con_fecha()
 
         partes = []
         if nombre := perfil.get("nombre"):
             partes.append(f"Se llama {nombre}.")
 
-        # La meta sale del plan de esta charla, no del perfil: es lo que hace
-        # que dos objetivos a la vez no se pisen. Los de otras charlas se
-        # nombran como lo que son, para que el coach pueda preguntar de cuál
-        # se habla en vez de dar uno por hecho.
-        if plan:
-            frase = f"En esta charla prepara un {plan.get('distancia')}"
+        # La meta sale del plan de esta charla, nunca del perfil ni de otra
+        # conversación: es lo que hace que dos objetivos a la vez no se pisen.
+        if guardado:
+            plan, inicio = guardado
+            frase = f"Prepara un {plan.get('distancia')}"
             if plan.get("semanas"):
                 frase += f" con un plan de {plan['semanas']} semanas"
             if plan.get("dias_por_semana"):
                 frase += f", entrenando {plan['dias_por_semana']} días por semana"
             partes.append(frase + ".")
-        if otras:
-            partes.append(
-                f"En otras conversaciones tiene planes de {_enumerar(otras)}; "
-                "son metas aparte y no se mezclan con esta."
-            )
-        if perfil.get("vdot"):
-            partes.append(f"Su VDOT calculado es {perfil['vdot']}.")
+            if plan.get("vdot"):
+                partes.append(f"Su VDOT calculado es {plan['vdot']}.")
+            if situacion := self._situacion_en_el_plan(plan, inicio, hoy):
+                partes.append(situacion)
+
         if lesion := perfil.get("molestia_reciente"):
             partes.append(f"Reportó una molestia en {lesion}; pregúntale cómo sigue.")
-        if ultima:
-            dias = ultima["dias"]
-            cuando = "hoy" if dias == 0 else "ayer" if dias == 1 else f"hace {dias} días"
-            partes.append(f"Hablaron por última vez {cuando}. Terminaron así: {ultima['texto']}")
         return " ".join(partes) or None
 
-    def _otras_metas(self) -> list[str]:
-        """Distancias que el corredor prepara en otras charlas."""
-        with conectar(self.ruta) as con:
-            filas = con.execute(
-                "SELECT plan FROM planes WHERE corredor_id = ? AND conversacion != ? "
-                "ORDER BY id DESC",
-                (self.corredor_id, self.conversacion),
-            ).fetchall()
-        vistas: list[str] = []
-        for f in filas:
-            distancia = json.loads(f["plan"]).get("distancia")
-            if distancia and distancia not in vistas:
-                vistas.append(distancia)
-        return vistas
+    def _situacion_en_el_plan(self, plan: dict, inicio: date,
+                              hoy: date | None = None) -> str | None:
+        """Por dónde va hoy el corredor en el plan de esta charla.
 
-    def _ultima_charla(self) -> dict | None:
-        with conectar(self.ruta) as con:
-            fila = con.execute(
-                "SELECT texto, creado, conversacion FROM turnos "
-                "WHERE corredor_id = ? AND conversacion != ? AND rol = 'model' "
-                "ORDER BY id DESC LIMIT 1",
-                (self.corredor_id, self.conversacion),
-            ).fetchone()
-        if not fila:
+        Retomar una charla una semana después y que el coach sepa cuál es el
+        plan pero no en qué semana va obliga a que lo primero sea preguntarlo.
+        El motor ya sabe la respuesta: es el mismo cálculo que decide el
+        recordatorio diario.
+        """
+        # El import va aquí porque recordatorios importa esta clase: arriba
+        # sería circular.
+        from app.recordatorios import NOMBRE_DIA, NOMBRE_TIPO, semana_del_plan, sesion_de
+
+        hoy = hoy or date.today()
+        total = len(plan.get("semanas_plan") or [])
+        if not total:
             return None
-        return {
-            "texto": fila["texto"][:200],
-            "dias": (date.today() - _fecha_local(fila["creado"])).days,
-        }
+
+        numero = semana_del_plan(inicio, hoy)
+        if numero > total:
+            return ("Su plan ya terminó; pregúntale cómo le fue en la carrera "
+                    "antes de proponerle nada nuevo.")
+        if numero < 1:
+            return None
+
+        situacion = f"Va por la semana {numero} de {total}"
+        sesion = sesion_de(plan, inicio, hoy)
+        if not sesion:
+            return situacion + "."
+        if sesion["tipo"] == "descanso":
+            return situacion + f", y hoy {NOMBRE_DIA[sesion['dia']]} le toca descanso."
+        toca = NOMBRE_TIPO.get(sesion["tipo"], sesion["tipo"]).lower()
+        km = f" de {sesion['km']:g} km" if sesion.get("km") else ""
+        return situacion + f", y hoy {NOMBRE_DIA[sesion['dia']]} le toca {toca}{km}."
