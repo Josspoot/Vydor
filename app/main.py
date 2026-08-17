@@ -102,8 +102,19 @@ async def enlace_telegram(corredor: str):
     usuario = await telegram.nombre_del_bot()
     if not usuario:
         return {"disponible": False}
-    codigo = telegram.generar_codigo(corredor.strip()[:64])
-    return {"disponible": True, "url": f"https://t.me/{usuario}?start={codigo}"}
+    corredor = corredor.strip()[:64]
+    codigo = telegram.generar_codigo(corredor)
+    # Si ya está vinculado, la interfaz no debe invitarle a vincularse otra
+    # vez como si no hubiera pasado nada: enseña el estado y deja el enlace
+    # por si cambió de teléfono.
+    vinculado = bool(
+        Memoria(corredor, conversacion="ajustes").perfil().get("telegram_chat_id")
+    )
+    return {
+        "disponible": True,
+        "vinculado": vinculado,
+        "url": f"https://t.me/{usuario}?start={codigo}",
+    }
 
 
 @app.get("/api/conversaciones")

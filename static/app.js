@@ -17,6 +17,7 @@ const S = {
   mesVista: 0,
   planActivo: null,        // de qué plan llegan los recordatorios de Telegram
   totalPlanes: 0,          // elegir solo tiene sentido si hay más de uno
+  telegram: null,          // {disponible, vinculado, url} que devuelve el servidor
   vista: "chat",
 };
 
@@ -116,6 +117,27 @@ async function cargarHistorial() {
   }
 }
 
+/* Vive en el panel lateral y no en la vista de Plan, donde estaba: allí solo
+   aparecía si el corredor cambiaba de pestaña, así que desde el chat el botón
+   sencillamente no existía. Los recordatorios no son parte del plan, son un
+   ajuste del corredor. */
+function bloqueTelegram() {
+  const tg = S.telegram;
+  if (!tg || !tg.disponible) return "";
+  if (tg.vinculado) {
+    return `<h3>Telegram</h3>
+      <p class="vinculado">✓ Recibes el entrenamiento cada mañana.</p>
+      <p class="pieTelegram">
+        <a href="${esc(tg.url)}" target="_blank" rel="noopener">Vincular otro teléfono</a>
+      </p>`;
+  }
+  return `<h3>Telegram</h3>
+    <a class="enlaceBoton" href="${esc(tg.url)}" target="_blank" rel="noopener"
+      >Recibir el entrenamiento cada mañana</a>
+    <p class="pieTelegram">Se abre el chat con el bot; no hay que registrarse
+      ni copiar nada.</p>`;
+}
+
 function pintarHistorial(charlas, planes) {
   const lista = charlas.length
     ? charlas.map((c) => `
@@ -139,7 +161,8 @@ function pintarHistorial(charlas, planes) {
   $("#historial").innerHTML = `
     <button id="nueva" class="nueva">+ Nueva conversación</button>
     <h3>Conversaciones</h3>${lista}
-    <h3>Planes guardados</h3>${listaPlanes}`;
+    <h3>Planes guardados</h3>${listaPlanes}
+    ${bloqueTelegram()}`;
 
   $("#nueva").onclick = nuevaConversacion;
   $$("#historial [data-charla]").forEach((b) =>
@@ -775,8 +798,8 @@ function reproducir(buffer) {
     .then((r) => r.json())
     .then((d) => {
       if (!d.disponible) return;
-      $("#enlaceTelegram").href = d.url;
-      $("#telegram").hidden = false;
+      S.telegram = d;
+      cargarHistorial();          // el lateral ya está pintado: hay que rehacerlo
     })
     .catch(() => {});
 })();

@@ -122,7 +122,19 @@ async def escuchar(ruta=None) -> None:
                     "timeout": 30,
                     **({"offset": desplazamiento} if desplazamiento else {}),
                 })
+            if r.status_code == 409:
+                # Telegram solo admite un consumidor por token. Callar aquí
+                # deja un bot mudo sin una sola pista en el log, que es la
+                # peor forma de fallar: todo parece estar bien.
+                log.warning(
+                    "otro proceso está escuchando este bot (409): cierra los "
+                    "demás servidores o los /start se los queda el otro"
+                )
+                await asyncio.sleep(5)
+                continue
             if r.status_code != 200:
+                log.warning("Telegram devolvió %s al escuchar: %s",
+                            r.status_code, r.text[:200])
                 await asyncio.sleep(5)
                 continue
 

@@ -104,7 +104,7 @@ La clave se saca gratis en [AI Studio](https://aistudio.google.com/apikey) y
 ## Tests
 
 ```bash
-.venv/bin/python -m pytest -q     # 214 tests
+.venv/bin/python -m pytest -q     # 215 tests
 ```
 
 Cubren la matemática de VDOT contra tablas, las reglas de carga sobre planes
@@ -205,6 +205,15 @@ de vincular simplemente no aparece.
 La vinculación no pide registrarse: el corredor abre un enlace con un código de
 un solo uso, el bot recibe `/start <codigo>` y aprende su chat. El código se
 quema al usarlo, para que un enlace filtrado no sirva dos veces.
+
+El enlace vive en el **panel lateral**, junto al historial, y no en la vista de
+Plan: los recordatorios son un ajuste del corredor, no parte de un plan
+concreto, y allí se ve desde cualquier pestaña. Si ya está vinculado, el panel
+lo dice en vez de volver a invitarle a hacerlo.
+
+> Telegram solo admite **un proceso escuchando** por token. Si hay dos
+> servidores levantados, uno recibe `409 Conflict` y se queda sin los `/start`
+> —el bot parece mudo—. Ahora eso sale en el log en vez de fallar en silencio.
 
 ```bash
 TELEGRAM_BOT_TOKEN=...   # de @BotFather
