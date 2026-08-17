@@ -118,7 +118,12 @@ async def api_transcripcion(conversacion: str, corredor: str):
 
 @app.get("/api/planes")
 async def api_planes(corredor: str):
-    return {"planes": planes_de(corredor.strip()[:64])}
+    corredor = corredor.strip()[:64]
+    memoria = Memoria(corredor, conversacion="ajustes")
+    return {
+        "planes": planes_de(corredor),
+        "activo": memoria.id_del_plan_activo(),
+    }
 
 
 @app.get("/api/planes/{plan_id}")
@@ -127,6 +132,20 @@ async def api_plan(plan_id: int, corredor: str):
     if plan is None:
         raise HTTPException(404, "ese plan no existe o no es tuyo")
     return {"plan": plan}
+
+
+@app.post("/api/planes/{plan_id}/activo")
+async def api_activar_plan(plan_id: int, corredor: str):
+    """Elige de qué plan llegan los recordatorios diarios.
+
+    Con dos metas a la vez hay que poder decir cuál se está corriendo: si no,
+    el recordatorio sale del plan más reciente, que no tiene por qué ser el
+    que el corredor tiene en marcha.
+    """
+    memoria = Memoria(corredor.strip()[:64], conversacion="ajustes")
+    if not memoria.activar_plan(plan_id):
+        raise HTTPException(404, "ese plan no existe o no es tuyo")
+    return {"activo": plan_id}
 
 
 @app.get("/")

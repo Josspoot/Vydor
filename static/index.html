@@ -113,6 +113,13 @@
     display: block; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .item .meta { display: block; font-size: 11px; color: var(--apagado); margin-top: 1px; }
+  /* Marca cuál de los planes manda los recordatorios diarios. */
+  .insignia {
+    font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
+    background: var(--acento); color: var(--fondo); border-radius: 999px;
+    padding: 1px 6px; margin-left: 4px; vertical-align: 1px;
+  }
+  .accion:disabled { opacity: .55; cursor: default; }
   .pequeno { font-size: 12.5px; padding: 4px 9px; }
 
   /* -------------------------------------------------------- conversación */
@@ -402,6 +409,7 @@
       <div id="accionesPlan" hidden>
         <div class="acciones">
           <button class="accion" id="pdf">Descargar plan en PDF</button>
+          <button class="accion" id="activar">Recibir recordatorios de este plan</button>
         </div>
       </div>
       <div id="plan">

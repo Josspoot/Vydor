@@ -15,6 +15,7 @@ const S = {
   planInicio: null,        // desde cuándo cuenta el plan, para el calendario
   semanaVista: 0,
   mesVista: 0,
+  planActivo: null,        // de qué plan llegan los recordatorios de Telegram
   vista: "chat",
 };
 
@@ -105,7 +106,9 @@ async function cargarHistorial() {
       fetch(`/api/conversaciones?corredor=${S.corredor}`),
       fetch(`/api/planes?corredor=${S.corredor}`),
     ]);
-    pintarHistorial((await rc.json()).conversaciones, (await rp.json()).planes);
+    const planes = await rp.json();
+    S.planActivo = planes.activo;
+    pintarHistorial((await rc.json()).conversaciones, planes.planes);
   } catch {
     /* sin historial la app sigue sirviendo para una charla nueva */
   }
@@ -125,7 +128,8 @@ function pintarHistorial(charlas, planes) {
   const listaPlanes = planes.length
     ? planes.map((p) => `
         <button class="item ${p.id === S.planId ? "activo" : ""}" data-plan="${p.id}">
-          <span class="titulo">${esc((p.distancia || "").toUpperCase())} · ${p.semanas} semanas</span>
+          <span class="titulo">${esc((p.distancia || "").toUpperCase())} · ${p.semanas} semanas${
+            p.id === S.planActivo ? ` <span class="insignia">recordatorios</span>` : ""}</span>
           <span class="meta">${fechaCorta(p.creado)}${p.vdot ? ` · VDOT ${p.vdot}` : ""}</span>
         </button>`).join("")
     : `<p class="vacio pequeno">Aquí se guardarán tus planes.</p>`;
@@ -180,8 +184,9 @@ async function abrirPlan(id, cambiar = true) {
   if (!r.ok) return;
   const { plan } = await r.json();
   S.planId = id;
-  const planes = (await (await fetch(`/api/planes?corredor=${S.corredor}`)).json()).planes;
-  const meta = planes.find((p) => p.id === id);
+  const guardados = await (await fetch(`/api/planes?corredor=${S.corredor}`)).json();
+  S.planActivo = guardados.activo;
+  const meta = guardados.planes.find((p) => p.id === id);
   dibujarPlan(plan, meta ? new Date(meta.creado) : new Date());
   if (cambiar) cambiarVista("plan");
   cargarHistorial();
@@ -209,6 +214,44 @@ function dibujarPlan(plan, inicio = new Date()) {
   conectarGrafica();
   pintarSemana();
   $("#accionesPlan").hidden = false;
+  pintarBotonActivar();
+}
+
+/* De qué plan llegan los recordatorios. Solo tiene sentido elegir cuando hay
+   más de una meta viva, así que con un plan único el botón sobra. */
+function pintarBotonActivar() {
+  const boton = $("#activar");
+  const esElActivo = S.planId !== null && S.planId === S.planActivo;
+  boton.disabled = esElActivo;
+  boton.textContent = esElActivo
+    ? "Recibes los recordatorios de este plan"
+    : "Recibir recordatorios de este plan";
+}
+
+/* El plan llega por el WebSocket sin su id, porque lo genera la herramienta.
+   Se recupera de la lista guardada para que los botones que actúan sobre
+   "este plan" —recordatorios— sepan sobre cuál actúan. */
+async function adoptarPlanNuevo() {
+  try {
+    const guardados = await (await fetch(`/api/planes?corredor=${S.corredor}`)).json();
+    const mio = guardados.planes.find((p) => p.conversacion === S.conversacion);
+    S.planActivo = guardados.activo;
+    if (mio) S.planId = mio.id;
+    pintarBotonActivar();
+    cargarHistorial();
+  } catch {
+    /* el plan ya se ve; sin id solo se pierde el botón de recordatorios */
+  }
+}
+
+async function activarPlan() {
+  if (S.planId === null) return;
+  const r = await fetch(`/api/planes/${S.planId}/activo?corredor=${S.corredor}`,
+                        { method: "POST" });
+  if (!r.ok) return;
+  S.planActivo = (await r.json()).activo;
+  pintarBotonActivar();
+  cargarHistorial();
 }
 
 function seccionResumen(plan) {
@@ -642,6 +685,7 @@ function manejarJson(msg) {
       S.planId = null;
       dibujarPlan(msg.plan, new Date());
       cambiarVista("plan");
+      adoptarPlanNuevo();
       break;
     case "interrumpido":
       fuentes.forEach((f) => { try { f.stop(); } catch {} });
@@ -709,6 +753,7 @@ function reproducir(buffer) {
     micActivo ? detener() : iniciar().catch((e) => marcar(e.message, "error"));
   $$(".pestana").forEach((b) => (b.onclick = () => cambiarVista(b.dataset.vista)));
   $("#pdf").onclick = exportarPDF;
+  $("#activar").onclick = activarPlan;
   $("#formTexto").onsubmit = enviarTexto;
   $("#abrirHistorial").onclick = () => document.body.classList.toggle("historialAbierto");
 

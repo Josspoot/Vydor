@@ -156,6 +156,13 @@ Tres vistas sobre los mismos datos, más un historial lateral:
 Un corredor puede tener **varios planes a la vez** —preparar un 10K y pensar ya
 en la media— y el historial los lista todos.
 
+Cada charla es una meta, y eso vale también para lo que el coach recuerda: al
+abrir una conversación, la memoria que entra en la sesión describe *su* plan.
+Los de otras charlas se mencionan como lo que son, metas aparte, para que el
+coach pueda preguntar de cuál se habla en vez de darlo por hecho. Solo lo que
+es de la persona y no del objetivo —el nombre, una molestia abierta, el VDOT—
+viaja entre conversaciones.
+
 ### PDF
 
 El botón *Descargar plan en PDF* abre el diálogo de impresión con una vista
@@ -168,6 +175,11 @@ dependencias nuevas, y el maquetado ya era HTML.
 Cada mañana el corredor recibe el entrenamiento del día: qué toca, cuántos
 kilómetros y a qué ritmo. Si dejó una molestia sin cerrar, el mensaje pregunta
 por ella antes que por el entrenamiento.
+
+Con dos metas vivas hay que poder decir cuál se está corriendo: el botón
+*Recibir recordatorios de este plan* lo elige, y mientras no se elija nada
+mandan los del plan más reciente. El mensaje nombra el plan del que sale
+—«Plan 10K · semana 3 de 12»— porque suelto en el teléfono, si no, no se sabe.
 
 Para activarlo, habla con [@BotFather](https://t.me/BotFather), crea un bot con
 `/newbot` y pon el token en `.env`. Sin token la app funciona igual y el botón
