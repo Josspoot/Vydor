@@ -4,29 +4,85 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Vydor · Coach de running</title>
+<script>
+  /* Va aquí, antes de pintar nada, y no en app.js: aplicar el tema al final
+     de la página haría que quien eligió el oscuro viera un fogonazo blanco
+     en cada carga. Es lo único que este archivo ejecuta en línea. */
+  if (localStorage.getItem("vydor-tema") === "oscuro")
+    document.documentElement.dataset.theme = "dark";
+</script>
 <style>
+  /* Dos temas sobre los mismos tokens. El claro es el de casa; el oscuro se
+     activa poniendo data-theme="dark" en <html>, y la elección se guarda.
+     Ninguna regla de más abajo puede llevar un color literal: si lo lleva,
+     ese punto se queda con el tema equivocado al cambiar. */
   :root {
-    /* La app se compromete con un solo aspecto oscuro, no invierte con el
-       sistema: los colores de la gráfica están validados contra --panel. */
+    --fondo: #f1f4f8;
+    --panel: #ffffff;
+    --panel-alto: #f6f8fa;
+    --borde: #e4e8ee;
+    --texto: #111726;
+    --tenue: #55607a;
+    --apagado: #6b7686;
+
+    /* La acción principal es negra sobre claro y blanca sobre oscuro: se
+       invierte con el tema en vez de arrastrar un color de marca. */
+    --primario: #0d1220;
+    --sobre-primario: #ffffff;
+    --acento: #2563eb;
+    --sobre-acento: #ffffff;
+    --alerta: #dc2626;
+    --sobre-alerta: #ffffff;
+
+    --borde-ok: #8fd3ae;
+    --borde-aviso: #e6c06a;
+    --borde-peligro: #f0a3a3;
+    --borde-clave: #b9cdea;
+
+    /* Serie de la gráfica, medida contra #ffffff: 5.17, 5.02 y 5.48 : 1.
+       Pasan de sobra el 3:1 de objeto gráfico, y también el 4.5:1 de texto,
+       porque el calendario las usa como color de letra. */
+    --fase-normal: #2563eb;
+    --fase-recuperacion: #b45309;
+    --fase-afinamiento: #047857;
+
+    --rejilla: #e9edf3;
+    --sombra: 0 1px 2px rgba(16, 24, 40, .04), 0 10px 28px rgba(16, 24, 40, .06);
+    --sombra-flotante: 0 10px 30px rgba(16, 24, 40, .14);
+    --radio: 18px;
+    --radio-chico: 11px;
+    --lateral: 260px;
+  }
+
+  :root[data-theme="dark"] {
     --fondo: #0f1115;
     --panel: #171a21;
     --panel-alto: #1e2230;
     --borde: #262b36;
     --texto: #e7e9ee;
     --tenue: #99a1b3;
-    --apagado: #6b7385;
-    --acento: #4ade80;
-    --alerta: #f87171;
+    --apagado: #8b93a5;
 
-    /* Serie de la gráfica. Validadas contra #171a21: banda de luminosidad,
-       piso de croma, separación CVD 8.4, visión normal 19.8, contraste >=3:1. */
+    --primario: #f2f4f8;
+    --sobre-primario: #0d1220;
+    --acento: #60a5fa;
+    --sobre-acento: #0b1220;
+    --alerta: #f87171;
+    --sobre-alerta: #2b0707;
+
+    --borde-ok: #1c5c33;
+    --borde-aviso: #6b5312;
+    --borde-peligro: #6b2020;
+    --borde-clave: #2f4a6d;
+
+    /* Serie validada contra #171a21: 4.78, 5.67 y 5.11 : 1. */
     --fase-normal: #3987e5;
     --fase-recuperacion: #c98500;
     --fase-afinamiento: #199e70;
 
     --rejilla: #2c2c2a;
-    --radio: 14px;
-    --lateral: 260px;
+    --sombra: 0 1px 2px rgba(0, 0, 0, .3);
+    --sombra-flotante: 0 10px 30px rgba(0, 0, 0, .5);
   }
   * { box-sizing: border-box; }
   html { -webkit-text-size-adjust: 100%; }
@@ -36,23 +92,32 @@
     display: flex; flex-direction: column; min-height: 100vh; line-height: 1.5;
   }
   h1, h2, h3 { margin: 0; }
+  /* Sin esto los enlaces se quedan con el azul por defecto del navegador, que
+     es un color ajeno a los temas: sobre el fondo oscuro resulta ilegible. */
+  a { color: var(--acento); }
   .apagado { color: var(--apagado); font-weight: 400; }
 
   /* ------------------------------------------------------------ cabecera */
   header {
-    padding: 10px 16px; border-bottom: 1px solid var(--borde);
+    padding: 11px 18px; border-bottom: 1px solid var(--borde);
     display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
     background: var(--panel); position: sticky; top: 0; z-index: 20;
   }
   .marca { font-size: 15px; font-weight: 650; letter-spacing: -0.01em; }
   .marca span { color: var(--tenue); font-weight: 400; }
-  .pestanas { display: flex; gap: 3px; background: var(--fondo); padding: 3px; border-radius: 10px; }
+  .pestanas {
+    display: flex; gap: 3px; background: var(--fondo); padding: 4px;
+    border-radius: 999px; border: 1px solid var(--borde);
+  }
   .pestana {
     background: none; border: 0; color: var(--tenue); font-family: inherit;
-    font-size: 13px; font-weight: 600; padding: 7px 14px; border-radius: 7px; cursor: pointer;
+    font-size: 13px; font-weight: 600; padding: 7px 16px; border-radius: 999px;
+    cursor: pointer;
   }
   .pestana:hover { color: var(--texto); }
-  .pestana[aria-selected="true"] { background: var(--panel-alto); color: var(--texto); }
+  .pestana[aria-selected="true"] {
+    background: var(--panel); color: var(--texto); box-shadow: var(--sombra);
+  }
   .estado {
     font-size: 12.5px; color: var(--tenue); margin-left: auto;
     display: flex; align-items: center; gap: 7px;
@@ -62,11 +127,19 @@
   .punto.error { background: var(--alerta); }
   button { font-family: inherit; }
   #boton {
-    background: var(--acento); color: #06240f; border: 0; border-radius: 10px;
-    padding: 9px 16px; font-size: 13.5px; font-weight: 650; cursor: pointer;
+    background: var(--primario); color: var(--sobre-primario); border: 0;
+    border-radius: var(--radio-chico);
+    padding: 10px 18px; font-size: 13.5px; font-weight: 650; cursor: pointer;
   }
-  #boton:hover { filter: brightness(1.08); }
-  #boton.detener { background: var(--alerta); color: #2b0707; }
+  #boton:hover { filter: brightness(1.18); }
+  #boton.detener { background: var(--alerta); color: var(--sobre-alerta); }
+  /* Cambiar de tema: un solo botón que dice a qué se va, no en qué estás. */
+  #tema {
+    background: var(--panel-alto); color: var(--tenue); border: 1px solid var(--borde);
+    border-radius: var(--radio-chico); padding: 8px 11px; font-size: 14px;
+    cursor: pointer; line-height: 1;
+  }
+  #tema:hover { color: var(--texto); border-color: var(--acento); }
   #abrirHistorial {
     display: none; background: var(--panel-alto); color: var(--texto);
     border: 1px solid var(--borde); border-radius: 9px; padding: 8px 11px; cursor: pointer;
@@ -80,7 +153,8 @@
   }
   .panel {
     background: var(--panel); border: 1px solid var(--borde);
-    border-radius: var(--radio); padding: 18px; min-width: 0;
+    border-radius: var(--radio); padding: 22px; min-width: 0;
+    box-shadow: var(--sombra);
   }
   .panel > h2 {
     font-size: 11px; text-transform: uppercase; letter-spacing: .09em;
@@ -90,8 +164,8 @@
   /* ----------------------------------------------------------- historial */
   #historial {
     background: var(--panel); border: 1px solid var(--borde);
-    border-radius: var(--radio); padding: 12px; position: sticky; top: 70px;
-    max-height: calc(100vh - 86px); overflow-y: auto;
+    border-radius: var(--radio); padding: 14px; position: sticky; top: 74px;
+    max-height: calc(100vh - 90px); overflow-y: auto; box-shadow: var(--sombra);
   }
   #historial h3 {
     font-size: 10px; text-transform: uppercase; letter-spacing: .09em;
@@ -116,7 +190,7 @@
   /* Marca cuál de los planes manda los recordatorios diarios. */
   .insignia {
     font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
-    background: var(--acento); color: var(--fondo); border-radius: 999px;
+    background: var(--acento); color: var(--sobre-acento); border-radius: 999px;
     padding: 1px 6px; margin-left: 4px; vertical-align: 1px;
   }
   .accion:disabled { opacity: .55; cursor: default; }
@@ -174,9 +248,9 @@
     background: var(--panel-alto); border: 1px solid var(--borde);
   }
   .veredicto .icono { font-size: 15px; line-height: 1.35; flex: none; }
-  .veredicto.viable { border-color: #1c5c33; }
-  .veredicto.ajustado, .veredicto.demasiado_largo { border-color: #6b5312; }
-  .veredicto.no_recomendado { border-color: #6b2020; }
+  .veredicto.viable { border-color: var(--borde-ok); }
+  .veredicto.ajustado, .veredicto.demasiado_largo { border-color: var(--borde-aviso); }
+  .veredicto.no_recomendado { border-color: var(--borde-peligro); }
   .veredicto b { display: block; margin-bottom: 2px; }
 
   .bloque { margin-bottom: 24px; }
@@ -227,7 +301,7 @@
     position: fixed; z-index: 30; pointer-events: none; opacity: 0;
     background: var(--panel-alto); border: 1px solid var(--borde);
     border-radius: 9px; padding: 8px 11px; font-size: 12.5px;
-    box-shadow: 0 6px 20px rgba(0,0,0,.45); transition: opacity .1s; max-width: 220px;
+    box-shadow: var(--sombra-flotante); transition: opacity .1s; max-width: 220px;
   }
   #globo b { display: block; margin-bottom: 2px; }
   #globo .m { color: var(--tenue); }
@@ -254,7 +328,7 @@
     .dia .nombre { grid-column: 1 / -1; }
   }
   .dia.descanso { opacity: .55; }
-  .dia.clave { border-color: #2f4a6d; }
+  .dia.clave { border-color: var(--borde-clave); }
   .dia.carrera { border-color: var(--acento); }
   .dia .nombre {
     font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
@@ -332,7 +406,7 @@
     #historial {
       position: fixed; inset: 56px auto 0 0; width: var(--lateral); z-index: 15;
       border-radius: 0; max-height: none; transform: translateX(-100%);
-      transition: transform .18s; box-shadow: 8px 0 24px rgba(0,0,0,.4);
+      transition: transform .18s; box-shadow: var(--sombra-flotante);
     }
     body.historialAbierto #historial { transform: none; }
     #conversacion { max-height: 50vh; }
@@ -389,6 +463,7 @@
     <button class="pestana" data-vista="plan" role="tab" aria-selected="false">Plan</button>
     <button class="pestana" data-vista="calendario" role="tab" aria-selected="false">Calendario</button>
   </div>
+  <button id="tema" type="button" aria-label="Cambiar entre tema claro y oscuro">🌙</button>
   <button id="boton">Hablar con Vydor</button>
   <div class="estado"><span class="punto" id="punto"></span><span id="estado">desconectado</span></div>
 </header>

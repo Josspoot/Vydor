@@ -104,7 +104,7 @@ La clave se saca gratis en [AI Studio](https://aistudio.google.com/apikey) y
 ## Tests
 
 ```bash
-.venv/bin/python -m pytest -q     # 218 tests
+.venv/bin/python -m pytest -q     # 219 tests
 ```
 
 Cubren la matemática de VDOT contra tablas, las reglas de carga sobre planes
@@ -143,8 +143,19 @@ compartido no drene la cuota.
 - [x] Historial navegable: varias charlas y varios planes a la vez
 - [x] Vistas de chat, plan semanal y calendario mensual
 - [x] Exportar el plan a PDF desglosado día a día
+- [x] Tema claro y oscuro, con la elección recordada
 
 ## La interfaz
+
+Claro por defecto y oscuro a un clic, con la elección recordada. Los dos temas
+salen de los mismos tokens y **ninguna regla lleva un color literal**: si lo
+llevara, ese punto se quedaría con el tema equivocado al cambiar. El tema se
+aplica en el `<head>`, antes de pintar, para que quien eligió el oscuro no vea
+un fogonazo blanco en cada carga.
+
+La serie de la gráfica está medida contra cada fondo —5.17, 5.02 y 5.48 : 1
+sobre blanco; 4.78, 5.67 y 5.11 : 1 sobre el panel oscuro—, porque el
+calendario la usa también como color de letra y ahí el listón es 4.5:1.
 
 Tres vistas sobre los mismos datos, más un historial lateral:
 

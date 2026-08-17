@@ -100,6 +100,30 @@ function cambiarVista(vista) {
   if (vista === "calendario") pintarCalendario();
 }
 
+/* ================================================================== tema */
+
+/* El claro es el de casa; el oscuro se recuerda entre visitas. El <head> ya
+   lo aplicó antes de pintar, así que aquí solo se alterna y se guarda. */
+function temaActual() {
+  return document.documentElement.dataset.theme === "dark" ? "oscuro" : "claro";
+}
+
+function pintarBotonTema() {
+  const boton = $("#tema");
+  const oscuro = temaActual() === "oscuro";
+  // El icono anuncia a dónde vas, no dónde estás: es lo que espera quien lo pulsa.
+  boton.textContent = oscuro ? "☀️" : "🌙";
+  boton.title = oscuro ? "Cambiar a tema claro" : "Cambiar a tema oscuro";
+}
+
+function cambiarTema() {
+  const oscuro = temaActual() === "claro";
+  if (oscuro) document.documentElement.dataset.theme = "dark";
+  else delete document.documentElement.dataset.theme;
+  localStorage.setItem("vydor-tema", oscuro ? "oscuro" : "claro");
+  pintarBotonTema();
+}
+
 /* ============================================================= historial */
 
 async function cargarHistorial() {
@@ -787,6 +811,8 @@ function reproducir(buffer) {
   $$(".pestana").forEach((b) => (b.onclick = () => cambiarVista(b.dataset.vista)));
   $("#pdf").onclick = exportarPDF;
   $("#activar").onclick = activarPlan;
+  $("#tema").onclick = cambiarTema;
+  pintarBotonTema();
   $("#formTexto").onsubmit = enviarTexto;
   $("#abrirHistorial").onclick = () => document.body.classList.toggle("historialAbierto");
 
