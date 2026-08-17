@@ -234,6 +234,36 @@
     display: block; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .item .meta { display: block; font-size: 11px; color: var(--apagado); margin-top: 1px; }
+
+  /* La papelera se ve siempre, apagada, y se enciende al pasar por encima: si
+     solo apareciera con el puntero no existiría en una pantalla táctil. */
+  .fila { display: flex; align-items: center; gap: 2px; }
+  .fila .item { flex: 1; min-width: 0; }
+  .borrar {
+    background: none; border: 0; color: var(--apagado); cursor: pointer;
+    border-radius: 8px; padding: 6px; opacity: .4; flex: none;
+    display: inline-flex; transition: var(--transicion);
+  }
+  .fila:hover .borrar { opacity: 1; }
+  .borrar:hover { color: var(--alerta); background: var(--panel-alto); }
+  .borrar:active { transform: scale(.9); }
+  .fila.confirmando {
+    flex-wrap: wrap; gap: 6px; padding: 8px 9px; margin-bottom: 2px;
+    background: var(--panel-alto); border: 1px solid var(--borde-peligro);
+    border-radius: 8px;
+  }
+  .fila .pregunta { flex: 1 0 100%; font-size: 12px; color: var(--tenue); }
+  .mini {
+    font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+    padding: 4px 10px; border-radius: 7px; border: 1px solid var(--borde);
+    background: var(--panel); color: var(--texto); transition: var(--transicion);
+  }
+  .mini:hover { border-color: var(--acento); }
+  .mini.peligro { background: var(--alerta); color: var(--sobre-alerta); border-color: transparent; }
+  .mini.peligro:hover { filter: brightness(1.1); }
+  .mini:active { transform: scale(.95); }
+  /* El silencio es un interruptor: encendido tiene que notarse. */
+  .iconoBoton.encendido { background: var(--panel-alto); color: var(--acento); }
   /* Marca cuál de los planes manda los recordatorios diarios. */
   .insignia {
     font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
@@ -604,6 +634,15 @@
   <symbol id="i-charla" viewBox="0 0 24 24">
     <path d="M20 14.5a2.5 2.5 0 0 1-2.5 2.5H8l-4 3.5v-14A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5Z"/>
   </symbol>
+  <symbol id="i-sonido" viewBox="0 0 24 24">
+    <path d="M11 5 6.5 9H3v6h3.5L11 19zM15 9.2a4 4 0 0 1 0 5.6M17.8 6.5a8 8 0 0 1 0 11"/>
+  </symbol>
+  <symbol id="i-silencio" viewBox="0 0 24 24">
+    <path d="M11 5 6.5 9H3v6h3.5L11 19zM16 10l5 4M21 10l-5 4"/>
+  </symbol>
+  <symbol id="i-papelera" viewBox="0 0 24 24">
+    <path d="M4 6.5h16M9.5 6.5V4.8a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v1.7M6 6.5l.8 12a1.5 1.5 0 0 0 1.5 1.4h7.4a1.5 1.5 0 0 0 1.5-1.4l.8-12"/>
+  </symbol>
   <symbol id="i-plan" viewBox="0 0 24 24">
     <rect x="4" y="4.5" width="16" height="15" rx="2.5"/><path d="M4 9h16M9 4.5v15"/>
   </symbol>
@@ -618,6 +657,8 @@
     <button class="pestana" data-vista="plan" role="tab" aria-selected="false">Plan</button>
     <button class="pestana" data-vista="calendario" role="tab" aria-selected="false">Calendario</button>
   </div>
+  <button id="silencio" class="iconoBoton" type="button"
+          aria-label="Silenciar la voz de Vydor" aria-pressed="false"></button>
   <button id="tema" class="iconoBoton" type="button"
           aria-label="Cambiar entre tema claro y oscuro"></button>
   <div class="estado"><span class="punto" id="punto"></span><span id="estado">desconectado</span></div>

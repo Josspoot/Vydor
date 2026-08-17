@@ -104,7 +104,7 @@ La clave se saca gratis en [AI Studio](https://aistudio.google.com/apikey) y
 ## Tests
 
 ```bash
-.venv/bin/python -m pytest -q     # 220 tests
+.venv/bin/python -m pytest -q     # 228 tests
 ```
 
 Cubren la matemática de VDOT contra tablas, las reglas de carga sobre planes
@@ -144,6 +144,7 @@ compartido no drene la cuota.
 - [x] Vistas de chat, plan semanal y calendario mensual
 - [x] Exportar el plan a PDF desglosado día a día
 - [x] Tema claro y oscuro, con la elección recordada
+- [x] Silenciar la voz sin perder la conversación, y borrar charlas
 
 ## La interfaz
 

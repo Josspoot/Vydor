@@ -171,6 +171,46 @@ def planes_de(corredor_id: str, ruta: Path | str | None = None) -> list[dict]:
     return resumen
 
 
+def borrar_conversacion(conversacion: str, corredor_id: str,
+                        ruta: Path | str | None = None) -> bool:
+    """Borra una charla y el plan que salió de ella.
+
+    Van juntos a propósito: el plan pertenece a su conversación, así que
+    dejarlo suelto llenaría la lista de planes que ya no se pueden abrir.
+
+    El corredor viaja en cada consulta y no solo en la primera: sin eso,
+    conocer un id de conversación bastaría para borrar la de otro.
+    """
+    with conectar(ruta or RUTA_BD) as con:
+        borrados = con.execute(
+            "DELETE FROM turnos WHERE conversacion = ? AND corredor_id = ?",
+            (conversacion, corredor_id),
+        ).rowcount
+        borrados += con.execute(
+            "DELETE FROM planes WHERE conversacion = ? AND corredor_id = ?",
+            (conversacion, corredor_id),
+        ).rowcount
+
+        # Si el plan que mandaba los recordatorios era de esta charla, la
+        # elección deja de tener sentido: se olvida y vuelve a mandar el más
+        # reciente, en vez de apuntar a una fila que ya no existe.
+        fila = con.execute(
+            "SELECT perfil FROM corredores WHERE id = ?", (corredor_id,)
+        ).fetchone()
+        if fila:
+            perfil = json.loads(fila["perfil"] or "{}")
+            activo = perfil.pop("plan_activo", None)
+            if activo is not None and not con.execute(
+                "SELECT 1 FROM planes WHERE id = ? AND corredor_id = ?",
+                (activo, corredor_id),
+            ).fetchone():
+                con.execute(
+                    "UPDATE corredores SET perfil = ?, actualizado = ? WHERE id = ?",
+                    (json.dumps(perfil, ensure_ascii=False), _ahora(), corredor_id),
+                )
+    return borrados > 0
+
+
 def transcripcion(conversacion: str, corredor_id: str,
                  ruta: Path | str | None = None) -> list[dict]:
     """Los turnos de una charla, para volver a pintarla en pantalla."""

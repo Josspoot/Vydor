@@ -10,7 +10,7 @@ from datetime import date, timedelta
 
 import pytest
 
-from app.memoria import Memoria, _ahora, _fecha_local
+from app.memoria import Memoria, _ahora, _fecha_local, borrar_conversacion
 
 
 @pytest.fixture
@@ -410,3 +410,56 @@ def test_retomar_una_conversacion_recupera_su_historial(bd):
     retomada = Memoria("josue", "charla-x", ruta=bd)
     assert len(retomada.historial()) == 1
     assert retomada.historial()[0]["parts"][0]["text"] == "Quiero un 21k"
+
+
+# --------------------------------------------------------------------------
+# Borrar una charla
+# --------------------------------------------------------------------------
+
+def test_borrar_una_charla_se_lleva_su_plan(bd):
+    """El plan pertenece a su conversación: dejarlo suelto llenaría la lista
+    de planes que ya no se pueden abrir."""
+    charla = Memoria("corredor-1", "charla-1", ruta=bd)
+    charla.guardar_turno("user", "Quiero un 10K")
+    charla.guardar_plan({"distancia": "10k", "semanas": 12})
+
+    assert borrar_conversacion("charla-1", "corredor-1", ruta=bd) is True
+    assert charla.historial() == []
+    assert charla.plan_de_esta_conversacion() is None
+
+
+def test_borrar_no_toca_las_demas_charlas(bd):
+    uno = Memoria("corredor-1", "charla-1", ruta=bd)
+    uno.guardar_plan({"distancia": "10k", "semanas": 12})
+    dos = Memoria("corredor-1", "charla-2", ruta=bd)
+    dos.guardar_turno("user", "y esto sigue aquí")
+    dos.guardar_plan({"distancia": "21k", "semanas": 16})
+
+    borrar_conversacion("charla-1", "corredor-1", ruta=bd)
+    assert dos.plan_de_esta_conversacion()["distancia"] == "21k"
+    assert len(dos.historial()) == 1
+
+
+def test_no_se_puede_borrar_la_charla_de_otro(bd):
+    """El corredor viaja en la consulta, no solo en la primera comprobación:
+    saberse un id de conversación no puede bastar para borrarla."""
+    ajena = Memoria("corredor-2", "suya", ruta=bd)
+    ajena.guardar_turno("user", "mi charla")
+
+    assert borrar_conversacion("suya", "corredor-1", ruta=bd) is False
+    assert len(ajena.historial()) == 1
+
+
+def test_borrar_el_plan_activo_devuelve_el_mando_al_mas_reciente(bd):
+    """Si se borra el plan elegido, la elección deja de apuntar a una fila que
+    ya no existe y los recordatorios vuelven al más reciente."""
+    diez = Memoria("corredor-1", "charla-10k", ruta=bd)
+    id_diez = diez.guardar_plan({"distancia": "10k", "semanas": 12})
+    media = Memoria("corredor-1", "charla-21k", ruta=bd)
+    media.guardar_plan({"distancia": "21k", "semanas": 16})
+    media.activar_plan(id_diez)
+    assert media.ultimo_plan()["distancia"] == "10k"
+
+    borrar_conversacion("charla-10k", "corredor-1", ruta=bd)
+    assert "plan_activo" not in media.perfil()
+    assert media.ultimo_plan()["distancia"] == "21k"

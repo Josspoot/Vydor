@@ -19,6 +19,8 @@ const S = {
   totalPlanes: 0,          // elegir solo tiene sentido si hay más de uno
   telegram: null,          // {disponible, vinculado, url} que devuelve el servidor
   nombre: null,            // cómo se llama el corredor, para saludarle
+  silencio: false,         // Vydor responde igual, pero sin sonar
+  borrando: null,          // charla que espera confirmación para borrarse
   vista: "chat",
 };
 
@@ -159,6 +161,33 @@ function cambiarTema() {
   pintarBotonTema();
 }
 
+/* ============================================================== silencio */
+
+/* Vydor sigue respondiendo con la voz apagada: la transcripción se escribe
+   igual, así que la conversación no se pierde, solo deja de sonar. Sirve para
+   quien está en la oficina, sin auriculares, o simplemente prefiere leer. */
+function pintarBotonSilencio() {
+  const boton = $("#silencio");
+  boton.innerHTML = icono(S.silencio ? "silencio" : "sonido");
+  boton.title = S.silencio ? "Volver a oír a Vydor" : "Silenciar la voz de Vydor";
+  boton.setAttribute("aria-pressed", String(S.silencio));
+  boton.classList.toggle("encendido", S.silencio);
+}
+
+function cambiarSilencio() {
+  S.silencio = !S.silencio;
+  localStorage.setItem("vydor-silencio", S.silencio ? "si" : "no");
+  // Callar ahora mismo: esperar a que termine la frase en curso no es callar.
+  if (S.silencio) pararAudio();
+  pintarBotonSilencio();
+}
+
+function pararAudio() {
+  fuentes.forEach((f) => { try { f.stop(); } catch {} });
+  fuentes = [];
+  siguienteInicio = finReproduccion = 0;
+}
+
 /* ========================================================= barra lateral */
 
 /* El historial se consulta de vez en cuando, así que vive fuera de pantalla y
@@ -175,6 +204,26 @@ function alternarHistorial() {
 }
 
 /* ============================================================= historial */
+
+/* Borrar pide confirmación dentro de la propia fila, sin diálogo del
+   navegador: se ve dónde estás borrando y no interrumpe la pantalla. */
+function pedirBorrar(id) {
+  S.borrando = id;
+  cargarHistorial();
+}
+
+async function borrarConversacion(id) {
+  S.borrando = null;
+  try {
+    await fetch(`/api/conversaciones/${id}?corredor=${S.corredor}`,
+                { method: "DELETE" });
+  } catch {
+    /* si falla, el historial vuelve a pintarse tal cual estaba */
+  }
+  // Si era la charla abierta, no se puede seguir mirando lo que ya no existe.
+  if (S.conversacion === id) nuevaConversacion();
+  else cargarHistorial();
+}
 
 async function cargarHistorial() {
   try {
@@ -213,14 +262,27 @@ function bloqueTelegram() {
 }
 
 function pintarHistorial(charlas, planes) {
+  // La papelera va fuera del botón de la charla —un botón dentro de otro no
+  // es marcado válido— y la confirmación sustituye a la fila, para que se vea
+  // exactamente cuál se va a borrar sin abrir un diálogo del navegador.
   const lista = charlas.length
-    ? charlas.map((c) => `
-        <button class="item ${c.id === S.conversacion ? "activo" : ""}"
-                data-charla="${esc(c.id)}">
-          <span class="titulo">${esc(c.titulo || "Sin título")}</span>
-          <span class="meta">${fechaCorta(c.fin)} · ${c.turnos} turnos${
-            c.planes ? ` · ${c.planes} plan${c.planes > 1 ? "es" : ""}` : ""}</span>
-        </button>`).join("")
+    ? charlas.map((c) => c.id === S.borrando
+        ? `<div class="fila confirmando">
+             <span class="pregunta">¿Borrar la charla y su plan?</span>
+             <button class="mini peligro" data-confirmar="${esc(c.id)}">Borrar</button>
+             <button class="mini" data-cancelar="1">Cancelar</button>
+           </div>`
+        : `<div class="fila">
+             <button class="item ${c.id === S.conversacion ? "activo" : ""}"
+                     data-charla="${esc(c.id)}">
+               <span class="titulo">${esc(c.titulo || "Sin título")}</span>
+               <span class="meta">${fechaCorta(c.fin)} · ${c.turnos} turnos${
+                 c.planes ? ` · ${c.planes} plan${c.planes > 1 ? "es" : ""}` : ""}</span>
+             </button>
+             <button class="borrar" data-borrar="${esc(c.id)}"
+                     title="Borrar esta conversación"
+                     aria-label="Borrar esta conversación">${icono("papelera")}</button>
+           </div>`).join("")
     : `<p class="vacio pequeno">Todavía no hay conversaciones guardadas.</p>`;
 
   const listaPlanes = planes.length
@@ -248,6 +310,12 @@ function pintarHistorial(charlas, planes) {
     mostrarHistorial(false);
     abrirPlan(+b.dataset.plan);
   }));
+  $$("#historial [data-borrar]").forEach((b) =>
+    (b.onclick = () => pedirBorrar(b.dataset.borrar)));
+  $$("#historial [data-confirmar]").forEach((b) =>
+    (b.onclick = () => borrarConversacion(b.dataset.confirmar)));
+  $$("#historial [data-cancelar]").forEach((b) =>
+    (b.onclick = () => { S.borrando = null; cargarHistorial(); }));
 }
 
 function nuevaConversacion() {
@@ -832,9 +900,7 @@ function manejarJson(msg) {
       adoptarPlanNuevo();
       break;
     case "interrumpido":
-      fuentes.forEach((f) => { try { f.stop(); } catch {} });
-      fuentes = [];
-      siguienteInicio = finReproduccion = 0;
+      pararAudio();
       break;
     case "fin":
     case "error":
@@ -875,7 +941,9 @@ function escribirTurno(quien, texto, completo = false) {
 }
 
 function reproducir(buffer) {
-  if (!ctxSalida) return;
+  // Con el silencio puesto el audio se descarta al llegar y no se encola:
+  // así el micrófono tampoco se cierra esperando a una voz que no suena.
+  if (!ctxSalida || S.silencio) return;
   const pcm = new Int16Array(buffer);
   const audio = ctxSalida.createBuffer(1, pcm.length, 24000);
   const canal = audio.getChannelData(0);
@@ -909,6 +977,9 @@ function reproducir(buffer) {
   $("#activar").onclick = activarPlan;
   $("#tema").onclick = cambiarTema;
   pintarBotonTema();
+  S.silencio = localStorage.getItem("vydor-silencio") === "si";
+  $("#silencio").onclick = cambiarSilencio;
+  pintarBotonSilencio();
   $("#boton").innerHTML = icono("ondas");
   $("#boton").title = "Hablar con Vydor";
   $("#enviarTexto").innerHTML = icono("enviar");

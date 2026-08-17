@@ -23,7 +23,8 @@ from fastapi.staticfiles import StaticFiles
 from app import telegram
 from app.live_agent import ConversacionCoach
 from app.memoria import (
-    Memoria, conversaciones, plan_por_id, planes_de, transcripcion,
+    Memoria, borrar_conversacion, conversaciones, plan_por_id, planes_de,
+    transcripcion,
 )
 
 # Ruta explícita: load_dotenv() busca desde el directorio actual, así que el
@@ -148,6 +149,14 @@ async def api_conversaciones(corredor: str):
 @app.get("/api/conversaciones/{conversacion}")
 async def api_transcripcion(conversacion: str, corredor: str):
     return {"turnos": transcripcion(conversacion, corredor.strip()[:64])}
+
+
+@app.delete("/api/conversaciones/{conversacion}")
+async def api_borrar_conversacion(conversacion: str, corredor: str):
+    """Borra una charla y el plan que salió de ella."""
+    if not borrar_conversacion(conversacion, corredor.strip()[:64]):
+        raise HTTPException(404, "esa conversación no existe o no es tuya")
+    return {"borrada": conversacion}
 
 
 @app.get("/api/planes")
