@@ -133,6 +133,13 @@ async def enlace_telegram(corredor: str):
     }
 
 
+@app.get("/api/corredor")
+async def api_corredor(corredor: str):
+    """Lo justo para saludar por su nombre a quien ya ha hablado antes."""
+    perfil = Memoria(corredor.strip()[:64], conversacion="ajustes").perfil()
+    return {"nombre": perfil.get("nombre")}
+
+
 @app.get("/api/conversaciones")
 async def api_conversaciones(corredor: str):
     return {"conversaciones": conversaciones(corredor.strip()[:64])}

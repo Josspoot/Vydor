@@ -42,7 +42,8 @@ const boton = $("#activar");
   entorno.pintarBotonActivar();
   assert.equal(boton.hidden, false);
   assert.equal(boton.disabled, true);
-  assert.match(boton.textContent, /Recibes los recordatorios/);
+  assert.match(boton.innerHTML, /Recibes los recordatorios/);
+  assert.match(boton.innerHTML, /i-check/, "y lo dice también con un icono");
 
   // Mirando otro plan: esto es lo que estaba roto.
   S().planId = 5;

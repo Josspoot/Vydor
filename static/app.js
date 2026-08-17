@@ -18,6 +18,7 @@ const S = {
   planActivo: null,        // de qué plan llegan los recordatorios de Telegram
   totalPlanes: 0,          // elegir solo tiene sentido si hay más de uno
   telegram: null,          // {disponible, vinculado, url} que devuelve el servidor
+  nombre: null,            // cómo se llama el corredor, para saludarle
   vista: "chat",
 };
 
@@ -100,6 +101,22 @@ function cambiarVista(vista) {
   if (vista === "calendario") pintarCalendario();
 }
 
+/* Los iconos son dibujos del propio documento, no emoji: un emoji cambia de
+   forma en cada sistema y no hereda el color del tema. */
+const icono = (nombre) => `<svg class="ico" aria-hidden="true"><use href="#i-${nombre}"/></svg>`;
+
+/* Se elige una al abrir cada charla nueva. Que varíe evita que la pantalla de
+   inicio se sienta siempre igual, sin llegar a ser graciosa cada vez. */
+const FRASES = [
+  "¿Qué carrera tienes en mente?",
+  "Cuéntame qué quieres preparar y lo armamos.",
+  "¿Cómo va el entrenamiento esta semana?",
+  "Dime tu meta y te digo si da tiempo.",
+  "¿Entrenamos algo hoy?",
+  "¿Qué te gustaría correr?",
+  "Empecemos por dónde estás y a dónde quieres llegar.",
+];
+
 /* ================================================================== tema */
 
 /* El claro es el de casa; el oscuro se recuerda entre visitas. El <head> ya
@@ -112,7 +129,7 @@ function pintarBotonTema() {
   const boton = $("#tema");
   const oscuro = temaActual() === "oscuro";
   // El icono anuncia a dónde vas, no dónde estás: es lo que espera quien lo pulsa.
-  boton.textContent = oscuro ? "☀️" : "🌙";
+  boton.innerHTML = icono(oscuro ? "sol" : "luna");
   boton.title = oscuro ? "Cambiar a tema claro" : "Cambiar a tema oscuro";
 }
 
@@ -122,6 +139,21 @@ function cambiarTema() {
   else delete document.documentElement.dataset.theme;
   localStorage.setItem("vydor-tema", oscuro ? "oscuro" : "claro");
   pintarBotonTema();
+}
+
+/* ========================================================= barra lateral */
+
+/* El historial se consulta de vez en cuando, así que vive fuera de pantalla y
+   se despliega por encima. Se cierra como se espera que se cierre un cajón:
+   con el velo, con Escape, y al elegir algo de dentro. */
+function mostrarHistorial(abierto) {
+  document.body.classList.toggle("historialAbierto", abierto);
+  $("#velo").hidden = !abierto;
+  $("#abrirHistorial").setAttribute("aria-expanded", String(abierto));
+}
+
+function alternarHistorial() {
+  mostrarHistorial(!document.body.classList.contains("historialAbierto"));
 }
 
 /* ============================================================= historial */
@@ -150,14 +182,14 @@ function bloqueTelegram() {
   if (!tg || !tg.disponible) return "";
   if (tg.vinculado) {
     return `<h3>Telegram</h3>
-      <p class="vinculado">✓ Recibes el entrenamiento cada mañana.</p>
+      <p class="vinculado">${icono("check")} Recibes el entrenamiento cada mañana.</p>
       <p class="pieTelegram">
         <a href="${esc(tg.url)}" target="_blank" rel="noopener">Vincular otro teléfono</a>
       </p>`;
   }
   return `<h3>Telegram</h3>
     <a class="enlaceBoton" href="${esc(tg.url)}" target="_blank" rel="noopener"
-      >Recibir el entrenamiento cada mañana</a>
+      >${icono("campana")} Recibir el entrenamiento cada mañana</a>
     <p class="pieTelegram">Se abre el chat con el bot; no hay que registrarse
       ni copiar nada.</p>`;
 }
@@ -183,16 +215,21 @@ function pintarHistorial(charlas, planes) {
     : `<p class="vacio pequeno">Aquí se guardarán tus planes.</p>`;
 
   $("#historial").innerHTML = `
-    <button id="nueva" class="nueva">+ Nueva conversación</button>
+    <button id="nueva" class="nueva">${icono("mas")} Nueva conversación</button>
     <h3>Conversaciones</h3>${lista}
     <h3>Planes guardados</h3>${listaPlanes}
     ${bloqueTelegram()}`;
 
-  $("#nueva").onclick = nuevaConversacion;
-  $$("#historial [data-charla]").forEach((b) =>
-    (b.onclick = () => abrirConversacion(b.dataset.charla)));
-  $$("#historial [data-plan]").forEach((b) =>
-    (b.onclick = () => abrirPlan(+b.dataset.plan)));
+  // Elegir algo cierra el cajón: lo que se venía a buscar ya está en pantalla.
+  $("#nueva").onclick = () => { mostrarHistorial(false); nuevaConversacion(); };
+  $$("#historial [data-charla]").forEach((b) => (b.onclick = () => {
+    mostrarHistorial(false);
+    abrirConversacion(b.dataset.charla);
+  }));
+  $$("#historial [data-plan]").forEach((b) => (b.onclick = () => {
+    mostrarHistorial(false);
+    abrirPlan(+b.dataset.plan);
+  }));
 }
 
 function nuevaConversacion() {
@@ -201,7 +238,7 @@ function nuevaConversacion() {
   S.plan = null;
   S.planId = null;
   ultimoQuien = null;
-  $("#conversacion").innerHTML = plantillaChatVacio();
+  pintarChatVacio();
   $("#plan").innerHTML = `<p class="vacio">Cuéntale a Vydor qué carrera tienes en mente
     y aquí aparecerá tu plan.</p>`;
   cambiarVista("chat");
@@ -217,7 +254,8 @@ async function abrirConversacion(id) {
 
   $("#conversacion").innerHTML = "";
   turnos.forEach((t) => escribirTurno(t.quien, t.texto, true));
-  if (!turnos.length) $("#conversacion").innerHTML = plantillaChatVacio();
+  if (turnos.length) $("#vista-chat").classList.remove("vacio");
+  else pintarChatVacio();
 
   // Si de esa charla salió un plan, se abre con ella.
   const planes = (await (await fetch(`/api/planes?corredor=${S.corredor}`)).json()).planes;
@@ -242,14 +280,34 @@ async function abrirPlan(id, cambiar = true) {
   cargarHistorial();
 }
 
+const EJEMPLOS = [
+  "Quiero correr un 10K en 12 semanas",
+  "Corro 25 kilómetros por semana y puedo entrenar 4 días",
+  "Me duele la rodilla desde el martes",
+];
+
 function plantillaChatVacio() {
-  return `<p class="vacio">Pulsa <strong>Hablar con Vydor</strong> y cuéntale qué
-    carrera tienes en mente.</p>
-    <ul class="ejemplos">
-      <li>Quiero correr un 10K en 12 semanas</li>
-      <li>Corro 25 kilómetros por semana y puedo entrenar 4 días</li>
-      <li>Me duele la rodilla desde el martes</li>
-    </ul>`;
+  const saludo = S.nombre ? `Hola, ${esc(S.nombre)}` : "Hola";
+  const frase = FRASES[Math.floor(Math.random() * FRASES.length)];
+  return `<div class="bienvenida">
+    <div class="emblema">${icono("ondas")}</div>
+    <p class="saludo">${saludo}</p>
+    <p class="frase">${esc(frase)}</p>
+    <ul class="ejemplos">${EJEMPLOS.map((t) =>
+      `<li><button type="button" data-ejemplo="${esc(t)}">${esc(t)}</button></li>`).join("")}
+    </ul>
+  </div>`;
+}
+
+/* Los ejemplos se pulsan y arrancan la charla: quien no sabe por dónde empezar
+   no debería tener que copiarlos a mano. */
+function pintarChatVacio() {
+  $("#conversacion").innerHTML = plantillaChatVacio();
+  $("#vista-chat").classList.add("vacio");
+  $$("#conversacion [data-ejemplo]").forEach((b) => (b.onclick = () => {
+    $("#entradaTexto").value = b.dataset.ejemplo;
+    $("#formTexto").requestSubmit();
+  }));
 }
 
 /* ============================================================== el plan */
@@ -279,9 +337,9 @@ function pintarBotonActivar() {
 
   const esElActivo = S.planId === S.planActivo;
   boton.disabled = esElActivo;
-  boton.textContent = esElActivo
-    ? "✓ Recibes los recordatorios de este plan"
-    : "Recibir recordatorios de este plan";
+  boton.innerHTML = icono(esElActivo ? "check" : "campana") + (esElActivo
+    ? "Recibes los recordatorios de este plan"
+    : "Recibir recordatorios de este plan");
 }
 
 /* El plan llega por el WebSocket sin su id, porque lo genera la herramienta.
@@ -517,9 +575,11 @@ function pintarCalendario() {
   destino.innerHTML = `
     <div class="panel">
       <div class="cabMes">
-        <button class="flecha" id="mesAnt" ${S.mesVista === 0 ? "disabled" : ""}>‹</button>
+        <button class="flecha" id="mesAnt" ${S.mesVista === 0 ? "disabled" : ""}
+                aria-label="Mes anterior">${icono("izq")}</button>
         <h2 class="tituloMes">${MESES[mes.getMonth()]} ${mes.getFullYear()}</h2>
-        <button class="flecha" id="mesSig" ${S.mesVista === meses.length - 1 ? "disabled" : ""}>›</button>
+        <button class="flecha" id="mesSig" ${S.mesVista === meses.length - 1 ? "disabled" : ""}
+                aria-label="Mes siguiente">${icono("der")}</button>
       </div>
       <p class="pie">El plan se organiza por semanas; el mes es solo para verlo
         de un vistazo. Toca un día para abrir su semana.</p>
@@ -699,8 +759,9 @@ async function iniciar() {
   worklet.connect(mudo).connect(ctxEntrada.destination);
 
   micActivo = true;
-  $("#boton").textContent = "Terminar";
-  $("#boton").classList.add("detener");
+  $("#boton").innerHTML = icono("parar");
+  $("#boton").title = "Terminar de hablar";
+  $("#boton").classList.add("hablando");
   marcar("listo, habla cuando quieras", "activo");
 }
 
@@ -712,8 +773,9 @@ function detener() {
   micro?.mediaStream?.getTracks().forEach((t) => t.stop());
   ctxEntrada?.close();
   ctxSalida?.close();
-  $("#boton").textContent = "Hablar con Vydor";
-  $("#boton").classList.remove("detener");
+  $("#boton").innerHTML = icono("ondas");
+  $("#boton").title = "Hablar con Vydor";
+  $("#boton").classList.remove("hablando");
   marcar("desconectado");
 }
 
@@ -759,8 +821,9 @@ function manejarJson(msg) {
 
 function escribirTurno(quien, texto, completo = false) {
   const caja = $("#conversacion");
-  caja.querySelector(".vacio")?.remove();
-  caja.querySelector(".ejemplos")?.remove();
+  // En cuanto hay algo que decir, el saludo deja sitio a la conversación.
+  caja.querySelector(".bienvenida")?.remove();
+  $("#vista-chat").classList.remove("vacio");
   // La API transcribe por fragmentos: se anexan al mismo turno salvo que
   // venga ya completo desde el historial.
   if (!completo && quien === ultimoQuien) {
@@ -813,10 +876,35 @@ function reproducir(buffer) {
   $("#activar").onclick = activarPlan;
   $("#tema").onclick = cambiarTema;
   pintarBotonTema();
+  $("#boton").innerHTML = icono("ondas");
+  $("#boton").title = "Hablar con Vydor";
+  $("#enviarTexto").innerHTML = icono("enviar");
+  $("#abrirHistorial").innerHTML = icono("panel");
+  $$(".marcaIcono").forEach((m) => (m.innerHTML = icono("ondas")));
   $("#formTexto").onsubmit = enviarTexto;
-  $("#abrirHistorial").onclick = () => document.body.classList.toggle("historialAbierto");
 
+  // El cajón arranca cerrado desde aquí y no solo desde el marcado: si el
+  // estado inicial vive en dos sitios, tarde o temprano discrepan.
+  mostrarHistorial(false);
+  $("#abrirHistorial").onclick = alternarHistorial;
+  $("#velo").onclick = () => mostrarHistorial(false);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") mostrarHistorial(false);
+  });
+
+  pintarChatVacio();
   cargarHistorial();
+
+  // El nombre solo sirve para saludar, así que si falla no se hace nada: la
+  // bienvenida dice "Hola" a secas y la charla empieza igual.
+  fetch(`/api/corredor?corredor=${S.corredor}`)
+    .then((r) => r.json())
+    .then((d) => {
+      if (!d.nombre) return;
+      S.nombre = d.nombre;
+      if ($("#vista-chat").classList.contains("vacio")) pintarChatVacio();
+    })
+    .catch(() => {});
 
   // El bloque de Telegram solo aparece si el servidor tiene bot configurado:
   // ofrecer un botón que no lleva a ningún sitio es peor que no ofrecerlo.

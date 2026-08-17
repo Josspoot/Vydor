@@ -104,7 +104,7 @@ La clave se saca gratis en [AI Studio](https://aistudio.google.com/apikey) y
 ## Tests
 
 ```bash
-.venv/bin/python -m pytest -q     # 219 tests
+.venv/bin/python -m pytest -q     # 220 tests
 ```
 
 Cubren la matemática de VDOT contra tablas, las reglas de carga sobre planes
@@ -157,7 +157,22 @@ La serie de la gráfica está medida contra cada fondo —5.17, 5.02 y 5.48 : 1
 sobre blanco; 4.78, 5.67 y 5.11 : 1 sobre el panel oscuro—, porque el
 calendario la usa también como color de letra y ahí el listón es 4.5:1.
 
-Tres vistas sobre los mismos datos, más un historial lateral:
+El historial no ocupa sitio permanente: es un cajón que se despliega por
+encima y se cierra con el velo, con Escape o al elegir algo de dentro. Se
+consulta de vez en cuando, y tenerlo siempre delante le robaba ancho a lo que
+sí se mira.
+
+Al abrir una conversación nueva, la pantalla se centra en un saludo —por el
+nombre, si ya lo sabe— y en tres ejemplos que **se pulsan y arrancan la
+charla**: quien no sabe por dónde empezar no debería tener que copiarlos a
+mano. Debajo, la misma caja sirve para hablar o escribir, con la voz como
+acción principal porque eso es lo que este coach es.
+
+Los iconos van dibujados en el propio documento y no como emoji: un emoji
+cambia de forma en cada sistema, no hereda el color del tema y rara vez dice
+lo que hace el botón.
+
+Tres vistas sobre los mismos datos:
 
 - **Chat** — la conversación, por voz o **escribiendo**: quien prefiere no
   hablar tiene un campo de texto, y el permiso de micrófono solo se pide si se

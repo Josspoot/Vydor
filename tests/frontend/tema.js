@@ -18,12 +18,12 @@ const responder = async () => json({ conversaciones: [], planes: [], activo: nul
   await respirar();
   assert.equal(primera.raiz.dataset.theme, undefined,
                "el tema de casa es el claro: <html> sin data-theme");
-  assert.equal(primera.$("#tema").textContent, "🌙",
+  assert.match(primera.$("#tema").innerHTML, /i-luna/,
                "el icono anuncia a dónde vas, no dónde estás");
 
   primera.entorno.cambiarTema();
   assert.equal(primera.raiz.dataset.theme, "dark", "al pulsar se va al oscuro");
-  assert.equal(primera.$("#tema").textContent, "☀️", "y el icono ofrece volver");
+  assert.match(primera.$("#tema").innerHTML, /i-sol/, "y el icono ofrece volver");
   assert.equal(primera.almacen.get("vydor-tema"), "oscuro", "la elección se guarda");
 
   primera.entorno.cambiarTema();
@@ -38,7 +38,7 @@ const responder = async () => json({ conversaciones: [], planes: [], activo: nul
   vuelve.entorno.pintarBotonTema();
   await respirar();
   assert.equal(vuelve.raiz.dataset.theme, "dark", "no se le pisa su elección");
-  assert.equal(vuelve.$("#tema").textContent, "☀️");
+  assert.match(vuelve.$("#tema").innerHTML, /i-sol/);
 
   console.log("ok · tema claro/oscuro: 9 comprobaciones");
 })().catch((error) => {

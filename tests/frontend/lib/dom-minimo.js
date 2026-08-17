@@ -16,14 +16,37 @@ const APP = path.join(__dirname, "..", "..", "..", "static", "app.js");
 
 function montar({ responder, almacenInicial = {} } = {}) {
   const elementos = new Map();
-  const nuevoElemento = (sel) => ({
-    sel, hidden: false, disabled: false, textContent: "", innerHTML: "",
-    href: "", value: "", title: "", dataset: {}, style: {},
-    classList: { add() {}, remove() {}, toggle() {} },
-    addEventListener() {}, appendChild() {}, setAttribute() {}, focus() {},
-    getContext: () => null,
-    getBoundingClientRect: () => ({ width: 300, height: 100 }),
-  });
+  // Las clases y los atributos se guardan de verdad: hay comportamiento que
+  // solo se puede comprobar mirándolos —si el chat está vacío, si el cajón
+  // está abierto—, y un classList de adorno lo daría siempre por bueno.
+  const nuevoElemento = (sel) => {
+    const clases = new Set();
+    const atributos = new Map();
+    return {
+      sel, hidden: false, disabled: false, textContent: "", innerHTML: "",
+      href: "", value: "", title: "", dataset: {}, style: {}, clases, atributos,
+      classList: {
+        add: (c) => clases.add(c),
+        remove: (c) => clases.delete(c),
+        contains: (c) => clases.has(c),
+        toggle: (c, forzar) =>
+          (forzar ?? !clases.has(c)) ? clases.add(c) : clases.delete(c),
+      },
+      setAttribute: (k, v) => atributos.set(k, String(v)),
+      getAttribute: (k) => (atributos.has(k) ? atributos.get(k) : null),
+      addEventListener() {}, appendChild() {}, focus() {},
+      requestSubmit() {},
+      // innerHTML es una cadena, no un árbol: aquí no se puede buscar un nodo
+      // de verdad, así que se devuelve uno de mentira para que el código que
+      // encadena (`.querySelector(...).textContent = x`) no reviente. Lo que
+      // este arnés comprueba son las clases, los atributos y lo que se pinta,
+      // nunca la vida de los nodos.
+      querySelector: () => nuevoElemento("(hijo)"), remove() {},
+      get lastElementChild() { return nuevoElemento("(último)"); },
+      getContext: () => null,
+      getBoundingClientRect: () => ({ width: 300, height: 100 }),
+    };
+  };
   const $ = (sel) => {
     if (!elementos.has(sel)) elementos.set(sel, nuevoElemento(sel));
     return elementos.get(sel);
@@ -33,6 +56,7 @@ function montar({ responder, almacenInicial = {} } = {}) {
   // porque sobreviven a la recarga.
   const almacen = new Map(Object.entries(almacenInicial));
   const raiz = { dataset: {} };                 // <html>, donde vive el tema
+  const cuerpo = nuevoElemento("body");         // <body>, donde vive el cajón
   const peticiones = [];
 
   const entorno = {
@@ -47,7 +71,7 @@ function montar({ responder, almacenInicial = {} } = {}) {
     document: {
       documentElement: raiz,
       querySelector: $, querySelectorAll: () => [],
-      body: { classList: { toggle() {} } },
+      body: cuerpo,
       createElement: nuevoElemento, addEventListener() {},
     },
     window: { matchMedia: () => ({ matches: false, addEventListener() {} }) },
@@ -63,7 +87,7 @@ function montar({ responder, almacenInicial = {} } = {}) {
   // se expone con una línea añadida al final. Lo que se prueba no se toca.
   vm.runInContext(fs.readFileSync(APP, "utf8") + "\nglobalThis.__S = S;", entorno);
 
-  return { entorno, $, peticiones, almacen, raiz, S: () => entorno.__S };
+  return { entorno, $, peticiones, almacen, raiz, cuerpo, S: () => entorno.__S };
 }
 
 const json = (datos) => ({ ok: true, json: async () => datos });
