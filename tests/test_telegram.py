@@ -119,7 +119,7 @@ async def test_se_envia_el_entrenamiento_de_hoy(bd, enviados):
     chat, texto = enviados[0]
     assert chat == 555
     assert "Josué" in texto
-    assert "Semana 1 de 12" in texto
+    assert "semana 1 de 12" in texto
 
 
 async def test_sin_nadie_vinculado_no_se_envia_nada(bd, enviados):

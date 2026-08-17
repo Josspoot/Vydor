@@ -116,9 +116,12 @@ def test_el_dia_de_descanso_se_explica_en_positivo(plan):
     assert "parte del plan" in texto
 
 
-def test_el_mensaje_situa_la_semana(plan):
+def test_el_mensaje_situa_la_semana_y_nombra_el_plan(plan):
+    """Con dos planes vivos, un mensaje suelto tiene que decir de cuál es."""
     sesion = sesion_de(plan, date(2026, 8, 10), date(2026, 8, 16))
-    assert "Semana 1 de 12" in redactar(plan, sesion)
+    texto = redactar(plan, sesion)
+    assert "semana 1 de 12" in texto
+    assert "Plan 10K" in texto
 
 
 def test_el_mensaje_es_corto(plan):
@@ -166,7 +169,7 @@ def test_recordatorio_completo_desde_la_memoria(bd, plan):
     texto = recordatorio_para("josue", _domingo_de_esta_semana(), ruta=bd)
     assert texto is not None
     assert "Josué" in texto
-    assert "Semana 1 de 12" in texto
+    assert "semana 1 de 12" in texto
 
 
 def test_una_molestia_abierta_se_pregunta_antes_de_entrenar(bd, plan):

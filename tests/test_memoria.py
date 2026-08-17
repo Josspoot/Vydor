@@ -111,7 +111,12 @@ def test_el_perfil_sobrevive_a_una_nueva_conversacion(bd):
     assert otra.perfil()["nombre"] == "Josué"
 
 
-def test_guardar_plan_alimenta_el_perfil(memoria):
+def test_guardar_plan_solo_copia_al_perfil_lo_que_es_de_la_persona(memoria):
+    """El VDOT es fisiología y viaja con el corredor; la meta no.
+
+    Guardar la distancia en el perfil hacía que un segundo plan reescribiera
+    lo que el coach recordaba del primero.
+    """
     memoria.guardar_plan({
         "distancia": "42k",
         "semanas": 18,
@@ -120,10 +125,9 @@ def test_guardar_plan_alimenta_el_perfil(memoria):
         "viabilidad": {"km_pico_alcanzable": 70.0},
     })
     perfil = memoria.perfil()
-    assert perfil["distancia_objetivo"] == "42k"
-    assert perfil["semanas_plan"] == 18
     assert perfil["vdot"] == 44.2
-    assert perfil["km_pico"] == 70.0
+    assert "distancia_objetivo" not in perfil
+    assert "semanas_plan" not in perfil
 
 
 def test_se_recupera_el_ultimo_plan(memoria):
@@ -145,12 +149,74 @@ def test_corredor_nuevo_no_genera_resumen(memoria):
 
 
 def test_el_resumen_menciona_nombre_y_objetivo(memoria):
-    memoria.actualizar_perfil(nombre="Josué", distancia_objetivo="21k",
-                              semanas_plan=14, dias_por_semana=4)
+    memoria.actualizar_perfil(nombre="Josué")
+    memoria.guardar_plan({"distancia": "21k", "semanas": 14, "dias_por_semana": 4})
     resumen = memoria.resumen_para_prompt()
     assert "Josué" in resumen
     assert "21k" in resumen
     assert "14" in resumen
+
+
+def test_dos_metas_a_la_vez_no_se_pisan(bd):
+    """Cada charla habla de su plan, aunque el otro sea más reciente."""
+    diez = Memoria("corredor-1", "charla-10k", ruta=bd)
+    diez.guardar_plan({"distancia": "10k", "semanas": 12, "dias_por_semana": 4})
+
+    media = Memoria("corredor-1", "charla-21k", ruta=bd)
+    media.guardar_plan({"distancia": "21k", "semanas": 16, "dias_por_semana": 5})
+
+    # Volver a la charla del 10K: el coach debe seguir hablando del 10K.
+    de_vuelta = Memoria("corredor-1", "charla-10k", ruta=bd)
+    resumen = de_vuelta.resumen_para_prompt()
+    assert "10k" in resumen
+    assert "12 semanas" in resumen
+    # El 21K existe, pero nombrado como lo que es: otra meta.
+    assert "otras conversaciones" in resumen.lower()
+
+
+def test_el_plan_activo_manda_los_recordatorios(bd):
+    """Con dos planes vivos, el corredor elige de cuál quiere recordatorios."""
+    diez = Memoria("corredor-1", "charla-10k", ruta=bd)
+    id_diez = diez.guardar_plan({"distancia": "10k", "semanas": 12})
+
+    media = Memoria("corredor-1", "charla-21k", ruta=bd)
+    media.guardar_plan({"distancia": "21k", "semanas": 16})
+
+    # Sin elegir nada, manda el más reciente: el comportamiento de siempre.
+    assert media.ultimo_plan()["distancia"] == "21k"
+
+    assert media.activar_plan(id_diez) is True
+    assert media.ultimo_plan()["distancia"] == "10k"
+
+
+def test_rehacer_el_plan_de_la_misma_charla_mueve_el_activo(bd):
+    """Corregir la misma meta no debería obligar a re-elegir el plan activo."""
+    charla = Memoria("corredor-1", "charla-10k", ruta=bd)
+    charla.guardar_plan({"distancia": "10k", "semanas": 12})
+    charla.guardar_plan({"distancia": "10k", "semanas": 14})   # se rehace
+    assert charla.ultimo_plan()["semanas"] == 14
+
+
+def test_un_plan_de_otra_charla_no_roba_el_activo(bd):
+    """Pero una meta distinta sí respeta lo que el corredor eligió."""
+    diez = Memoria("corredor-1", "charla-10k", ruta=bd)
+    id_diez = diez.guardar_plan({"distancia": "10k", "semanas": 12})
+    diez.activar_plan(id_diez)
+
+    media = Memoria("corredor-1", "charla-21k", ruta=bd)
+    media.guardar_plan({"distancia": "21k", "semanas": 16})
+
+    assert media.ultimo_plan()["distancia"] == "10k"
+
+
+def test_no_se_puede_activar_el_plan_de_otro_corredor(bd):
+    ajeno = Memoria("corredor-2", "suya", ruta=bd)
+    id_ajeno = ajeno.guardar_plan({"distancia": "5k", "semanas": 8})
+
+    mia = Memoria("corredor-1", "mia", ruta=bd)
+    mia.guardar_plan({"distancia": "10k", "semanas": 12})
+    assert mia.activar_plan(id_ajeno) is False
+    assert mia.ultimo_plan()["distancia"] == "10k"
 
 
 def test_el_resumen_recuerda_una_molestia(memoria):

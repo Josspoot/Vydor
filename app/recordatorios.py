@@ -68,10 +68,14 @@ def redactar(plan: dict, sesion: dict, nombre: str | None = None) -> str:
     """
     saludo = f"Buenos días{', ' + nombre if nombre else ''}."
     total = len(plan["semanas_plan"])
+    # Nombrar el plan importa cuando hay más de uno: sin esto, un mensaje
+    # suelto en el teléfono no dice si es del 10K o de la media.
+    donde = (f"Plan {plan['distancia'].upper()} · semana " if plan.get("distancia")
+             else "Semana ") + f"{sesion['semana']} de {total}."
 
     if sesion["tipo"] == "descanso":
         return (f"{saludo} Hoy toca descanso. El descanso es parte del plan, no "
-                f"una pausa en él.\n\nSemana {sesion['semana']} de {total}.")
+                f"una pausa en él.\n\n{donde}")
 
     titulo = NOMBRE_TIPO.get(sesion["tipo"], sesion["tipo"])
     lineas = [
@@ -86,7 +90,7 @@ def redactar(plan: dict, sesion: dict, nombre: str | None = None) -> str:
     if ritmo:
         lineas.append(f"\nRitmo objetivo: {ritmo} por km ({NOMBRE_ZONA.get(sesion['zona'], sesion['zona'])}).")
 
-    lineas.append(f"\nSemana {sesion['semana']} de {total}.")
+    lineas.append(f"\n{donde}")
     if sesion["tipo"] == "carrera":
         lineas.append("Sal conservador los primeros kilómetros. Mucha suerte.")
     return "\n".join(lineas)

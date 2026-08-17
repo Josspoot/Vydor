@@ -85,6 +85,13 @@ def _fecha_local(marca: str) -> date:
     return momento.astimezone().date()
 
 
+def _enumerar(cosas: list[str]) -> str:
+    """"10K", "10K y 21K", "10K, 21K y 42K" — para que el prompt suene a prosa."""
+    if len(cosas) == 1:
+        return cosas[0]
+    return ", ".join(cosas[:-1]) + " y " + cosas[-1]
+
+
 @contextmanager
 def conectar(ruta: Path | str | None = None):
     con = sqlite3.connect(ruta or RUTA_BD)
@@ -280,39 +287,99 @@ class Memoria:
             )
         return datos
 
-    def guardar_plan(self, plan: dict) -> None:
+    def guardar_plan(self, plan: dict) -> int:
+        """Guarda el plan en esta conversación y devuelve su id.
+
+        Solo se copian al perfil del corredor los datos que son de la persona
+        y no de la meta. La distancia, las semanas y los días por semana viven
+        en el plan, y el plan vive en su conversación: si se guardaran aquí,
+        preparar un 21K en otra charla reescribiría lo que el coach recuerda
+        del 10K que ya estabas corriendo.
+        """
         with conectar(self.ruta) as con:
-            con.execute(
+            cursor = con.execute(
                 "INSERT INTO planes (corredor_id, conversacion, plan, creado) "
                 "VALUES (?, ?, ?, ?)",
                 (self.corredor_id, self.conversacion,
                  json.dumps(plan, ensure_ascii=False), _ahora()),
             )
-        v = plan.get("viabilidad", {})
-        self.actualizar_perfil(
-            distancia_objetivo=plan.get("distancia"),
-            semanas_plan=plan.get("semanas"),
-            dias_por_semana=plan.get("dias_por_semana"),
-            vdot=plan.get("vdot"),
-            km_pico=v.get("km_pico_alcanzable"),
-        )
+            plan_id = int(cursor.lastrowid)
+
+        self.actualizar_perfil(vdot=plan.get("vdot"))
+
+        # Mientras el corredor no elija, los recordatorios usan el plan más
+        # reciente; por eso aquí no se fija nada, o un valor por defecto
+        # pasaría por una decisión suya. Si ya eligió, rehacer el plan de esa
+        # misma charla es corregir la misma meta y el activo lo sigue; un plan
+        # de otra charla es otra meta y no le roba el puesto.
+        activo = self.perfil().get("plan_activo")
+        if activo is not None and self._conversacion_del_plan(activo) == self.conversacion:
+            self.actualizar_perfil(plan_activo=plan_id)
+        return plan_id
+
+    def _conversacion_del_plan(self, plan_id: int) -> str | None:
+        with conectar(self.ruta) as con:
+            fila = con.execute(
+                "SELECT conversacion FROM planes WHERE id = ? AND corredor_id = ?",
+                (plan_id, self.corredor_id),
+            ).fetchone()
+        return fila["conversacion"] if fila else None
+
+    def activar_plan(self, plan_id: int) -> bool:
+        """Marca de qué plan quiere recibir recordatorios el corredor."""
+        if self._conversacion_del_plan(plan_id) is None:
+            return False
+        self.actualizar_perfil(plan_activo=plan_id)
+        return True
 
     def ultimo_plan(self) -> dict | None:
         con_fecha = self.ultimo_plan_con_fecha()
         return con_fecha[0] if con_fecha else None
 
-    def ultimo_plan_con_fecha(self) -> tuple[dict, date] | None:
-        """El plan y el día en que se generó.
-
-        La fecha es imprescindible para los recordatorios: sin ella no se
-        puede saber en qué semana del plan va el corredor.
-        """
+    def plan_de_esta_conversacion(self) -> dict | None:
+        """El plan de la charla abierta, que es del que se está hablando."""
         with conectar(self.ruta) as con:
             fila = con.execute(
-                "SELECT plan, creado FROM planes WHERE corredor_id = ? "
+                "SELECT plan FROM planes WHERE corredor_id = ? AND conversacion = ? "
                 "ORDER BY id DESC LIMIT 1",
-                (self.corredor_id,),
+                (self.corredor_id, self.conversacion),
             ).fetchone()
+        return json.loads(fila["plan"]) if fila else None
+
+    def _fila_del_plan_activo(self):
+        """El plan del que salen los recordatorios.
+
+        Es el que el corredor marcó; si no marcó ninguno, o si el que marcó
+        ya no existe, el más reciente.
+        """
+        activo = self.perfil().get("plan_activo")
+        with conectar(self.ruta) as con:
+            fila = None
+            if activo is not None:
+                fila = con.execute(
+                    "SELECT id, plan, creado FROM planes "
+                    "WHERE id = ? AND corredor_id = ?",
+                    (activo, self.corredor_id),
+                ).fetchone()
+            if fila is None:
+                fila = con.execute(
+                    "SELECT id, plan, creado FROM planes WHERE corredor_id = ? "
+                    "ORDER BY id DESC LIMIT 1",
+                    (self.corredor_id,),
+                ).fetchone()
+        return fila
+
+    def id_del_plan_activo(self) -> int | None:
+        fila = self._fila_del_plan_activo()
+        return int(fila["id"]) if fila else None
+
+    def ultimo_plan_con_fecha(self) -> tuple[dict, date] | None:
+        """El plan activo y el día en que se generó.
+
+        La fecha es imprescindible: sin ella no se puede saber en qué semana
+        del plan va el corredor.
+        """
+        fila = self._fila_del_plan_activo()
         if not fila:
             return None
         return json.loads(fila["plan"]), _fecha_local(fila["creado"])
@@ -327,19 +394,31 @@ class Memoria:
         """
         perfil = self.perfil()
         ultima = self._ultima_charla()
-        if not perfil and not ultima:
+        plan = self.plan_de_esta_conversacion()
+        otras = self._otras_metas()
+        if not perfil and not ultima and not plan:
             return None
 
         partes = []
         if nombre := perfil.get("nombre"):
             partes.append(f"Se llama {nombre}.")
-        if perfil.get("distancia_objetivo"):
-            frase = f"Prepara un {perfil['distancia_objetivo']}"
-            if perfil.get("semanas_plan"):
-                frase += f" con un plan de {perfil['semanas_plan']} semanas"
-            if perfil.get("dias_por_semana"):
-                frase += f", entrenando {perfil['dias_por_semana']} días por semana"
+
+        # La meta sale del plan de esta charla, no del perfil: es lo que hace
+        # que dos objetivos a la vez no se pisen. Los de otras charlas se
+        # nombran como lo que son, para que el coach pueda preguntar de cuál
+        # se habla en vez de dar uno por hecho.
+        if plan:
+            frase = f"En esta charla prepara un {plan.get('distancia')}"
+            if plan.get("semanas"):
+                frase += f" con un plan de {plan['semanas']} semanas"
+            if plan.get("dias_por_semana"):
+                frase += f", entrenando {plan['dias_por_semana']} días por semana"
             partes.append(frase + ".")
+        if otras:
+            partes.append(
+                f"En otras conversaciones tiene planes de {_enumerar(otras)}; "
+                "son metas aparte y no se mezclan con esta."
+            )
         if perfil.get("vdot"):
             partes.append(f"Su VDOT calculado es {perfil['vdot']}.")
         if lesion := perfil.get("molestia_reciente"):
@@ -349,6 +428,21 @@ class Memoria:
             cuando = "hoy" if dias == 0 else "ayer" if dias == 1 else f"hace {dias} días"
             partes.append(f"Hablaron por última vez {cuando}. Terminaron así: {ultima['texto']}")
         return " ".join(partes) or None
+
+    def _otras_metas(self) -> list[str]:
+        """Distancias que el corredor prepara en otras charlas."""
+        with conectar(self.ruta) as con:
+            filas = con.execute(
+                "SELECT plan FROM planes WHERE corredor_id = ? AND conversacion != ? "
+                "ORDER BY id DESC",
+                (self.corredor_id, self.conversacion),
+            ).fetchall()
+        vistas: list[str] = []
+        for f in filas:
+            distancia = json.loads(f["plan"]).get("distancia")
+            if distancia and distancia not in vistas:
+                vistas.append(distancia)
+        return vistas
 
     def _ultima_charla(self) -> dict | None:
         with conectar(self.ruta) as con:
