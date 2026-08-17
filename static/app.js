@@ -16,6 +16,7 @@ const S = {
   semanaVista: 0,
   mesVista: 0,
   planActivo: null,        // de qué plan llegan los recordatorios de Telegram
+  totalPlanes: 0,          // elegir solo tiene sentido si hay más de uno
   vista: "chat",
 };
 
@@ -108,6 +109,7 @@ async function cargarHistorial() {
     ]);
     const planes = await rp.json();
     S.planActivo = planes.activo;
+    S.totalPlanes = planes.planes.length;
     pintarHistorial((await rc.json()).conversaciones, planes.planes);
   } catch {
     /* sin historial la app sigue sirviendo para una charla nueva */
@@ -186,6 +188,7 @@ async function abrirPlan(id, cambiar = true) {
   S.planId = id;
   const guardados = await (await fetch(`/api/planes?corredor=${S.corredor}`)).json();
   S.planActivo = guardados.activo;
+  S.totalPlanes = guardados.planes.length;
   const meta = guardados.planes.find((p) => p.id === id);
   dibujarPlan(plan, meta ? new Date(meta.creado) : new Date());
   if (cambiar) cambiarVista("plan");
@@ -221,10 +224,16 @@ function dibujarPlan(plan, inicio = new Date()) {
    más de una meta viva, así que con un plan único el botón sobra. */
 function pintarBotonActivar() {
   const boton = $("#activar");
-  const esElActivo = S.planId !== null && S.planId === S.planActivo;
+  // Sin id no se puede actuar sobre "este plan", y con una sola meta no hay
+  // nada que elegir: en ambos casos el botón sobra. Dejarlo visible pero
+  // muerto es peor que no ponerlo, que es justo el fallo que tenía.
+  boton.hidden = S.planId === null || S.totalPlanes < 2;
+  if (boton.hidden) return;
+
+  const esElActivo = S.planId === S.planActivo;
   boton.disabled = esElActivo;
   boton.textContent = esElActivo
-    ? "Recibes los recordatorios de este plan"
+    ? "✓ Recibes los recordatorios de este plan"
     : "Recibir recordatorios de este plan";
 }
 
@@ -236,6 +245,7 @@ async function adoptarPlanNuevo() {
     const guardados = await (await fetch(`/api/planes?corredor=${S.corredor}`)).json();
     const mio = guardados.planes.find((p) => p.conversacion === S.conversacion);
     S.planActivo = guardados.activo;
+    S.totalPlanes = guardados.planes.length;
     if (mio) S.planId = mio.id;
     pintarBotonActivar();
     cargarHistorial();

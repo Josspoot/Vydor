@@ -104,13 +104,18 @@ La clave se saca gratis en [AI Studio](https://aistudio.google.com/apikey) y
 ## Tests
 
 ```bash
-.venv/bin/python -m pytest -q     # 213 tests
+.venv/bin/python -m pytest -q     # 214 tests
 ```
 
 Cubren la matemática de VDOT contra tablas, las reglas de carga sobre planes
 generados (progresión, descargas, taper, 80/20), el triaje de síntomas, la
 memoria y los recordatorios. Los de Telegram sustituyen el envío por un doble:
 no tocan la red.
+
+Los de interfaz van en node (`tests/frontend/`) y cargan el `static/app.js`
+real sobre un DOM mínimo, en vez de repetir su lógica. Los lanza el mismo
+`pytest` —un test que hay que acordarse de ejecutar aparte es un test que nadie
+ejecuta— y se saltan si no hay node instalado.
 
 Un caso merece mención: el triaje **se niega a dictaminar** si no sabe si el
 dolor aparece en reposo, si hace cojear y si mejora al calentar. Salió de una
