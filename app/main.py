@@ -90,8 +90,24 @@ async def ciclo_de_vida(_: FastAPI):
             await tarea
 
 
+class EstaticosQueRevalidan(StaticFiles):
+    """Sirve los estáticos obligando al navegador a preguntar si cambiaron.
+
+    Sin cabecera de caché el navegador decide por heurística, y se queda con
+    un app.js viejo aunque el servidor ya sirva el nuevo: el síntoma es un
+    cambio que "no se refleja" y una hora perdida buscándolo en el sitio
+    equivocado. `no-cache` no desactiva la caché, obliga a revalidar: si el
+    archivo no cambió, la respuesta sigue siendo un 304 vacío.
+    """
+
+    async def get_response(self, path: str, scope):
+        respuesta = await super().get_response(path, scope)
+        respuesta.headers["cache-control"] = "no-cache"
+        return respuesta
+
+
 app = FastAPI(title="Coach de running por voz", lifespan=ciclo_de_vida)
-app.mount("/static", StaticFiles(directory=ESTATICOS), name="static")
+app.mount("/static", EstaticosQueRevalidan(directory=ESTATICOS), name="static")
 
 
 @app.get("/telegram/enlace")
@@ -161,7 +177,10 @@ async def api_activar_plan(plan_id: int, corredor: str):
 
 @app.get("/")
 async def raiz():
-    return FileResponse(ESTATICOS / "index.html")
+    # Mismo motivo que en los estáticos: si el navegador se queda con un
+    # index.html viejo, ni siquiera pide el JS nuevo.
+    return FileResponse(ESTATICOS / "index.html",
+                        headers={"cache-control": "no-cache"})
 
 
 @app.get("/salud")
