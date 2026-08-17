@@ -6,10 +6,11 @@ mantiene entre conversaciones.
 """
 
 import json
+from datetime import date
 
 import pytest
 
-from app.memoria import Memoria
+from app.memoria import Memoria, _ahora, _fecha_local
 
 
 @pytest.fixture
@@ -165,6 +166,17 @@ def test_el_resumen_recoge_la_charla_anterior(bd):
     resumen = nueva.resumen_para_prompt()
     assert "fondo del domingo" in resumen
     assert "hoy" in resumen
+
+
+def test_lo_guardado_ahora_cuenta_como_hoy_a_cualquier_hora():
+    """Las marcas se guardan en UTC; el día natural es el local.
+
+    Sin convertir, a partir de las 18:00 en México la fecha UTC ya era la de
+    mañana: el resumen decía "hace -1 días" y la semana del plan que usan los
+    recordatorios se corría un día. Este invariante se cumple a toda hora y en
+    cualquier zona, así que el test no depende de cuándo se ejecute.
+    """
+    assert _fecha_local(_ahora()) == date.today()
 
 
 def test_el_resumen_ignora_la_conversacion_en_curso(memoria):

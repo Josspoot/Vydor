@@ -104,7 +104,7 @@ La clave se saca gratis en [AI Studio](https://aistudio.google.com/apikey) y
 ## Tests
 
 ```bash
-.venv/bin/python -m pytest -q     # 203 tests
+.venv/bin/python -m pytest -q     # 204 tests
 ```
 
 Cubren la matemática de VDOT contra tablas, las reglas de carga sobre planes

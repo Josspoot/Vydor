@@ -70,6 +70,21 @@ def _ahora() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _fecha_local(marca: str) -> date:
+    """El día natural del corredor en que ocurrió algo guardado en UTC.
+
+    Se guarda en UTC para que la base no dependa de dónde corra el servidor,
+    pero "qué día fue" solo tiene sentido en la hora local: al este de UTC-0
+    la fecha UTC se adelanta por la noche, y comparar contra date.today()
+    daba diferencias negativas ("hablaron hace -1 días") y desplazaba en un
+    día la semana del plan que usan los recordatorios.
+    """
+    momento = datetime.fromisoformat(marca)
+    if momento.tzinfo is None:                 # filas antiguas, sin zona
+        momento = momento.replace(tzinfo=timezone.utc)
+    return momento.astimezone().date()
+
+
 @contextmanager
 def conectar(ruta: Path | str | None = None):
     con = sqlite3.connect(ruta or RUTA_BD)
@@ -300,7 +315,7 @@ class Memoria:
             ).fetchone()
         if not fila:
             return None
-        return json.loads(fila["plan"]), datetime.fromisoformat(fila["creado"]).date()
+        return json.loads(fila["plan"]), _fecha_local(fila["creado"])
 
     # ------------------------------------------------------------- resúmenes
 
@@ -345,8 +360,7 @@ class Memoria:
             ).fetchone()
         if not fila:
             return None
-        cuando = datetime.fromisoformat(fila["creado"]).date()
         return {
             "texto": fila["texto"][:200],
-            "dias": (date.today() - cuando).days,
+            "dias": (date.today() - _fecha_local(fila["creado"])).days,
         }
