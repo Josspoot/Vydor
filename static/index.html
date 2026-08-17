@@ -131,6 +131,8 @@
   .pestana { transition: var(--transicion); }
   .pestana:hover { color: var(--texto); }
   .pestana:active { transform: scale(.96); }
+  .pestana:disabled { opacity: .4; cursor: not-allowed; }
+  .pestana:disabled:hover { color: var(--tenue); }
   .pestana[aria-selected="true"] {
     background: var(--panel); color: var(--texto); box-shadow: var(--sombra);
   }
@@ -265,13 +267,32 @@
     display: flex; flex-wrap: wrap; gap: 7px; justify-content: center; margin: 0;
   }
   .bienvenida .ejemplos li { margin: 0; }
-  .turno { margin-bottom: 14px; font-size: 14px; }
+  /* Cada turno es una burbuja y el lado dice quién habla: lo tuyo a la
+     derecha, lo de Vydor a la izquierda. Con eso el nombre encima sobra, pero
+     no se borra —se oculta solo a la vista— porque quien navega con lector de
+     pantalla no tiene alineación de la que deducirlo. */
+  .turno { display: flex; margin-bottom: 10px; font-size: 14.5px; }
   .turno .quien {
-    font-size: 10px; text-transform: uppercase; letter-spacing: .07em;
-    color: var(--apagado); display: block; margin-bottom: 3px; font-weight: 600;
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip-path: inset(50%); white-space: nowrap;
   }
-  .turno.coach .quien { color: var(--acento); }
-  .turno.sistema { color: var(--tenue); font-style: italic; font-size: 13px; }
+  .turno .texto {
+    max-width: 76%; padding: 10px 14px; border-radius: 16px;
+    background: var(--panel-alto); border: 1px solid var(--borde);
+    white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+  .turno.coach { justify-content: flex-start; }
+  .turno.coach .texto { border-bottom-left-radius: 5px; }
+  .turno.corredor { justify-content: flex-end; }
+  .turno.corredor .texto {
+    background: var(--acento); border-color: transparent; color: var(--sobre-acento);
+    border-bottom-right-radius: 5px;
+  }
+  .turno.sistema { justify-content: center; }
+  .turno.sistema .texto {
+    background: none; border: 0; color: var(--tenue); font-style: italic;
+    font-size: 13px; text-align: center; max-width: 90%;
+  }
   .vacio { color: var(--tenue); font-size: 14px; margin: 0; }
   .vacio strong { color: var(--texto); font-weight: 600; }
   /* Los ejemplos son botones de verdad: se pulsan y arrancan la charla. Antes

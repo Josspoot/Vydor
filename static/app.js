@@ -94,7 +94,22 @@ const VEREDICTO = {
 
 /* ================================================================ vistas */
 
+/* Plan y Calendario no existen hasta que hay algo que enseñar. Se apagan en
+   vez de esconderse para que se vea que están y por qué aún no. */
+function habilitarVistas(hayPlan) {
+  ["plan", "calendario"].forEach((v) => {
+    const boton = $(`.pestana[data-vista="${v}"]`);
+    if (!boton) return;
+    boton.disabled = !hayPlan;
+    boton.title = hayPlan ? "" : "Se activa en cuanto Vydor arme tu plan";
+  });
+  if (!hayPlan && S.vista !== "chat") cambiarVista("chat");
+}
+
 function cambiarVista(vista) {
+  // Una pestaña apagada no lleva a ningún sitio: sin plan, Plan y Calendario
+  // solo enseñarían un hueco.
+  if ($(`.pestana[data-vista="${vista}"]`)?.disabled) return;
   S.vista = vista;
   $$(".pestana").forEach((b) => b.setAttribute("aria-selected", b.dataset.vista === vista));
   $$(".vista").forEach((v) => (v.hidden = v.id !== `vista-${vista}`));
@@ -105,8 +120,11 @@ function cambiarVista(vista) {
    forma en cada sistema y no hereda el color del tema. */
 const icono = (nombre) => `<svg class="ico" aria-hidden="true"><use href="#i-${nombre}"/></svg>`;
 
-/* Se elige una al abrir cada charla nueva. Que varíe evita que la pantalla de
-   inicio se sienta siempre igual, sin llegar a ser graciosa cada vez. */
+/* Se elige uno al abrir cada charla nueva. Que varíe evita que la pantalla de
+   inicio se sienta siempre igual, sin llegar a ser graciosa cada vez.
+   Nada de "bienvenido": no sabemos el género de quien está al otro lado. */
+const SALUDOS = ["Hola", "Qué tal", "Buenas", "Hey", "Qué gusto verte"];
+
 const FRASES = [
   "¿Qué carrera tienes en mente?",
   "Cuéntame qué quieres preparar y lo armamos.",
@@ -241,6 +259,7 @@ function nuevaConversacion() {
   pintarChatVacio();
   $("#plan").innerHTML = `<p class="vacio">Cuéntale a Vydor qué carrera tienes en mente
     y aquí aparecerá tu plan.</p>`;
+  habilitarVistas(false);
   cambiarVista("chat");
   cargarHistorial();
 }
@@ -261,8 +280,10 @@ async function abrirConversacion(id) {
   const planes = (await (await fetch(`/api/planes?corredor=${S.corredor}`)).json()).planes;
   const suyo = planes.find((p) => p.conversacion === id);
   if (suyo) await abrirPlan(suyo.id, false);
+  else habilitarVistas(false);
 
   cambiarVista("chat");
+  irAlFinal();
   cargarHistorial();
 }
 
@@ -286,9 +307,12 @@ const EJEMPLOS = [
   "Me duele la rodilla desde el martes",
 ];
 
+const alAzar = (lista) => lista[Math.floor(Math.random() * lista.length)];
+
 function plantillaChatVacio() {
-  const saludo = S.nombre ? `Hola, ${esc(S.nombre)}` : "Hola";
-  const frase = FRASES[Math.floor(Math.random() * FRASES.length)];
+  const hola = alAzar(SALUDOS);
+  const saludo = S.nombre ? `${hola}, ${esc(S.nombre)}` : hola;
+  const frase = alAzar(FRASES);
   return `<div class="bienvenida">
     <div class="emblema">${icono("ondas")}</div>
     <p class="saludo">${saludo}</p>
@@ -323,6 +347,7 @@ function dibujarPlan(plan, inicio = new Date()) {
   pintarSemana();
   $("#accionesPlan").hidden = false;
   pintarBotonActivar();
+  habilitarVistas(true);
 }
 
 /* De qué plan llegan los recordatorios. Solo tiene sentido elegir cuando hay
@@ -819,6 +844,14 @@ function manejarJson(msg) {
   }
 }
 
+/* Bajar del todo solo funciona con la caja visible: mientras la pestaña está
+   oculta no tiene altura, así que asignar scrollTop no hace nada y la charla
+   se queda arriba. Por eso se llama también al volver al chat. */
+function irAlFinal() {
+  const caja = $("#conversacion");
+  caja.scrollTop = caja.scrollHeight;
+}
+
 function escribirTurno(quien, texto, completo = false) {
   const caja = $("#conversacion");
   // En cuanto hay algo que decir, el saludo deja sitio a la conversación.
@@ -838,7 +871,7 @@ function escribirTurno(quien, texto, completo = false) {
     caja.appendChild(div);
     ultimoQuien = completo ? null : quien;
   }
-  caja.scrollTop = caja.scrollHeight;
+  irAlFinal();
 }
 
 function reproducir(buffer) {
@@ -886,6 +919,7 @@ function reproducir(buffer) {
   // El cajón arranca cerrado desde aquí y no solo desde el marcado: si el
   // estado inicial vive en dos sitios, tarde o temprano discrepan.
   mostrarHistorial(false);
+  habilitarVistas(false);
   $("#abrirHistorial").onclick = alternarHistorial;
   $("#velo").onclick = () => mostrarHistorial(false);
   document.addEventListener("keydown", (e) => {

@@ -172,6 +172,16 @@ Los iconos van dibujados en el propio documento y no como emoji: un emoji
 cambia de forma en cada sistema, no hereda el color del tema y rara vez dice
 lo que hace el botón.
 
+La charla se lee como una de mensajería: lo que dice el corredor va a la
+derecha y lo de Vydor a la izquierda, cada turno en su burbuja. El lado ya dice
+quién habla, así que el nombre encima sobra —pero no se borra, solo se oculta a
+la vista: quien navega con lector de pantalla no tiene alineación de la que
+deducirlo—.
+
+**Plan y Calendario están apagados hasta que hay plan.** Se apagan en vez de
+esconderse, y explican por qué al pasar el puntero: una pestaña que aparece de
+la nada desconcierta más que una apagada que se enciende sola.
+
 Tres vistas sobre los mismos datos:
 
 - **Chat** — la conversación, por voz o **escribiendo**: quien prefiere no
